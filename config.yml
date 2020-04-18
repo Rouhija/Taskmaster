@@ -1,0 +1,7 @@
+programs:
+    script:
+        command: '/home/srouhe/hive-projects/taskmaster/test/script.sh'
+        autostart: true
+        autorestart: true
+        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scripterr.log'
+        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptout.log'
