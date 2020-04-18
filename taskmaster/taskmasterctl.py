@@ -10,7 +10,7 @@ Options:
 
 from taskmaster.config import Config
 
-ascii_snek = """\
+taskmaster_snek = """\
     --..,_                     _,.--.
        `'.'.                .'`__ o  `;__.
           '.'.            .'.'`  '---'`  `
@@ -18,10 +18,31 @@ ascii_snek = """\
               `'--....--'`
 """
 
+class Console:
+
+    def __init__(self, options, stdin=None, stdout=None):
+        self.options = options
+
+
 def main():
-    config = Config()
-    print(config.conf)
-    print(ascii_snek)
-    
+    print(taskmaster_snek)
+    c = Console("lol")
+    # if options is None:
+    #     options = ClientOptions()
+
+    # options.realize(args, doc=__doc__)
+    # c = Controller(options)
+
+    # if options.args:
+    #     c.onecmd(" ".join(options.args))
+    #     sys.exit(c.exitstatus)
+
+    # if options.interactive:
+    #     c.exec_cmdloop(args, options)
+    #     sys.exit(0)  # exitstatus always 0 for interactive mode
+
+if __name__ == "__main__":
+    main()
+
 if __name__ == '__main__':
     main()

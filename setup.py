@@ -10,6 +10,7 @@ if not (3, 5) < py_version < (3, 9):
 
 dist = setup(
     name='taskmasterctl',
+    version='1.0',
 	url='https://github.com/Rouhija/Taskmaster',
 	description="A system for controlling process state under UNIX",
     author="Sami Rouhe",

@@ -7,6 +7,12 @@ python3 setup.py develop
 ```
 
 ## Usage
+
+Launch
+```sh
+taskmasterd -c myconfig.yml
+```
+
 Reread config and start
 ```sh
 taskmasterctl reread
@@ -32,4 +38,6 @@ taskmasterctl> quit
 ### To-Do
 
 ### References
+- [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))
+- [Supervisor](https://www.digitalocean.com/community/tutorials/how-to-install-and-manage-supervisor-on-ubuntu-and-debian-vps)
 - [Setup.py](https://amir.rachum.com/blog/2017/07/28/python-entry-points/)

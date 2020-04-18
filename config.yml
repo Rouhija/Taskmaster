@@ -5,3 +5,9 @@ programs:
         autorestart: true
         stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scripterr.log'
         stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptout.log'
+    scriptshort:
+        command: '/home/srouhe/hive-projects/taskmaster/test/scriptshort.sh'
+        autostart: true
+        autorestart: true
+        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshorterr.log'
+        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshortout.log'
