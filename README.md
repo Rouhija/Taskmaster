@@ -43,5 +43,6 @@ taskmasterctl> quit
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))
 - [DaemonsMore](http://www.cems.uwe.ac.uk/~irjohnso/coursenotes/lrc/system/daemons/d3.htm)
+- [Sockets](https://pymotw.com/2/socket/tcp.html)
 - [Supervisor](https://www.digitalocean.com/community/tutorials/how-to-install-and-manage-supervisor-on-ubuntu-and-debian-vps)
 - [Setup.py](https://amir.rachum.com/blog/2017/07/28/python-entry-points/)
