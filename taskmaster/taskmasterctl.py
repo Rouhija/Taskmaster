@@ -8,6 +8,8 @@ Options:
 -
 """
 
+import sys
+import socket
 from taskmaster.config import Config
 
 taskmaster_snek = """\
@@ -26,23 +28,33 @@ class Console:
 
 def main():
     print(taskmaster_snek)
-    c = Console("lol")
-    # if options is None:
-    #     options = ClientOptions()
 
-    # options.realize(args, doc=__doc__)
-    # c = Controller(options)
+    # Create a TCP/IP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_address = ('localhost', 10000)
+    print('connecting to %s port %s' % server_address)
+    sock.connect(server_address)
 
-    # if options.args:
-    #     c.onecmd(" ".join(options.args))
-    #     sys.exit(c.exitstatus)
+    try:
+        
+        # Send data
+        message = 'This is the message.  It will be repeated.'.encode()
+        print('sending "%s"' % message)
+        sock.sendall(message)
 
-    # if options.interactive:
-    #     c.exec_cmdloop(args, options)
-    #     sys.exit(0)  # exitstatus always 0 for interactive mode
+        # Look for the response
+        amount_received = 0
+        amount_expected = len(message)
+        
+        while amount_received < amount_expected:
+            data = sock.recv(16)
+            amount_received += len(data)
+            print('received "%s"' % data)
+
+    finally:
+        print('closing socket')
+        sock.close()
+
 
 if __name__ == "__main__":
-    main()
-
-if __name__ == '__main__':
     main()

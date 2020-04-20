@@ -11,10 +11,24 @@ Options:
 import os
 import sys
 import signal
+import socket
+import logging
 from time import sleep
 from subprocess import Popen
 from taskmaster.config import Config
+from os.path import dirname, realpath
 
+
+parent_dir = dirname(dirname(realpath(__file__)))
+
+logging.basicConfig(
+    filename=f'{parent_dir}/logs/taskmasterd.log',
+    level=logging.DEBUG,
+    format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S'
+    )
+
+LOG = logging.getLogger(__name__)
 
 class Taskmasterd:
 
@@ -23,20 +37,51 @@ class Taskmasterd:
         self.directory = "/"
         self.programs = conf['programs']
         self.umask = 22
-        self.active = []
+        self.processes = []
+        self.server_address = ('localhost', 10000)
 
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
 
-    def signal_handler(self):
-        for pid in self.active:
-            pid.kill()
+    def signal_handler(self, signum, frame):
+        if signum == signal.SIGINT or signum == signal.SIGTERM:
+            for pid in self.processes:
+                LOG.debug(f'killing {pid}')
+                pid.kill()
+            sys.exit("taskmasterd received terminating signal... quitting")
 
-    def run(self):
-        for k, v in self.programs.items():
+    def listen_sockets(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create a TCP/IP socket
+        self.sock.bind(self.server_address)
+        self.sock.listen(1)
+
+    def start(self):
+        self.listen_sockets()
+        self.set_signals()
+        for k, _ in self.programs.items():
             self.init_program(k)
-        while 1:
+        self.serve_forever()
 
+    def serve_forever(self):
+        while 1:
+            LOG.debug('waiting for a connection')
+            connection, client_address = self.sock.accept()
+            try:
+                LOG.debug(f'connection from {client_address}')
+                # Receive the data in small chunks and retransmit it
+                while True:
+                    data = connection.recv(16)
+                    LOG.debug(f'received "{data}"')
+                    if data:
+                        LOG.debug('sending data back to the client')
+                        connection.sendall(data)
+                    else:
+                        LOG.debug(f'no more data from {client_address}')
+                        break
+                    
+            finally:
+                connection.close()
             sleep(1)
 
     def init_program(self, prog):
@@ -48,7 +93,7 @@ class Taskmasterd:
             stdout=log_stdout,
             stderr=log_stderr
         )
-        self.active.append(p)
+        self.processes.append(p)
 
     def daemonize(self):
         """
@@ -61,15 +106,15 @@ class Taskmasterd:
         """
         pid = os.fork()
         if pid != 0:
-            print("supervisord forked; parent exiting")
+            LOG.debug("supervisord forked; parent exiting")
             os._exit(0)
-        print("daemonizing the supervisord process")
+        LOG.debug("daemonizing the supervisord process")
         try:
             os.chdir(self.directory)
         except OSError as err:
-            print("can't chdir into %r: %s" % (self.directory, err))
+            LOG.error("can't chdir into %r: %s" % (self.directory, err))
         else:
-            print("set current directory: %r" % self.directory)
+            LOG.debug("set current directory: %r" % self.directory)
         os.close(0)
         self.stdin = sys.stdin = sys.__stdin__ = open("/dev/null")
         os.close(1)
@@ -82,10 +127,8 @@ class Taskmasterd:
 def main():
     config = Config()
     d = Taskmasterd(config.conf)
-    d.set_signals()
     d.daemonize()
-    while (1):
-        d.run()
+    d.start()
     
 if __name__ == '__main__':
     main()

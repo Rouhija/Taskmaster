@@ -3,7 +3,7 @@ Job control program, much like [Supervisor](http://supervisord.org/)
 
 ## Installation
 ```sh
-virtualenv venv && source venv/bin/activate
+virtualenv venv -p python3 && source venv/bin/activate
 python3 setup.py develop
 ```
 

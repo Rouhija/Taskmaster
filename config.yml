@@ -1,13 +1,13 @@
 programs:
     script:
-        command: '/home/srouhe/hive-projects/taskmaster/test/script.sh'
+        command: '/home/srouhe/hive/taskmaster/test/script.sh'
         autostart: true
         autorestart: true
-        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scripterr.log'
-        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptout.log'
+        stderr_logfile: '/home/srouhe/hive/taskmaster/logs/scripterr.log'
+        stdout_logfile: '/home/srouhe/hive/taskmaster/logs/scriptout.log'
     scriptshort:
-        command: '/home/srouhe/hive-projects/taskmaster/test/scriptshort.sh'
+        command: '/home/srouhe/hive/taskmaster/test/scriptshort.sh'
         autostart: true
         autorestart: true
-        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshorterr.log'
-        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshortout.log'
+        stderr_logfile: '/home/srouhe/hive/taskmaster/logs/scriptshorterr.log'
+        stdout_logfile: '/home/srouhe/hive/taskmaster/logs/scriptshortout.log'
