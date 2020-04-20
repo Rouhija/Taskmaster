@@ -13,11 +13,9 @@ import sys
 import signal
 import socket
 import logging
-from time import sleep
 from subprocess import Popen
 from taskmaster.config import Config
 from os.path import dirname, realpath
-
 
 parent_dir = dirname(dirname(realpath(__file__)))
 
@@ -26,7 +24,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(levelname)s:%(asctime)s ⁠— %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
-    )
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -39,6 +37,8 @@ class Taskmasterd:
         self.umask = 22
         self.processes = []
         self.server_address = ('localhost', 10000)
+        self.client_address = None
+        self.connection = None
 
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -49,6 +49,7 @@ class Taskmasterd:
             for pid in self.processes:
                 LOG.debug(f'killing {pid}')
                 pid.kill()
+            self.connection.close()
             sys.exit("taskmasterd received terminating signal... quitting")
 
     def listen_sockets(self):
@@ -66,23 +67,20 @@ class Taskmasterd:
     def serve_forever(self):
         while 1:
             LOG.debug('waiting for a connection')
-            connection, client_address = self.sock.accept()
+            self.connection, self.client_address = self.sock.accept()
             try:
-                LOG.debug(f'connection from {client_address}')
+                LOG.debug(f'connection from {self.client_address}')
                 # Receive the data in small chunks and retransmit it
                 while True:
-                    data = connection.recv(16)
+                    data = self.connection.recv(16)
                     LOG.debug(f'received "{data}"')
                     if data:
                         LOG.debug('sending data back to the client')
-                        connection.sendall(data)
+                        self.connection.sendall(data)
                     else:
-                        LOG.debug(f'no more data from {client_address}')
                         break
-                    
             finally:
-                connection.close()
-            sleep(1)
+                LOG.debug(f'all data from received from {self.client_address}')
 
     def init_program(self, prog):
         conf = self.programs[prog]
