@@ -7,6 +7,18 @@ virtualenv venv -p python3 && source venv/bin/activate
 python3 setup.py develop
 ```
 
+## Supervisor 
+```
+long_script                      RUNNING   pid 32676, uptime 0:00:29
+```
+clear
+```
+Error: clear requires a process name
+clear <name>            Clear a process' log files.
+clear <name> <name>     Clear multiple process' log files
+clear all               Clear all process' log files
+```
+
 ## Usage
 
 Launch

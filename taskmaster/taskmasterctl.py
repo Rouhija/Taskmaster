@@ -29,40 +29,17 @@ snake = """\
           '.'.            .'.'`  '---'`  `
             '.`'--....--'`.'
               `'--....--'`
-    \x1B[3mTaskmaster ©srouhe\x1B[23m
+    \x1B[3mTaskmaster\x1B[23m ©srouhe
 """
-
-DEFAULT_CMDS = [
-    'add',
-    'avail',
-    'clear',
-    'exit',
-    'fg',
-    'maintail',
-    'open',
-    'pid',
-    'quit',
-    'reload'
-    'remove',
-    'reread',
-    'restart',
-    'shutdown',
-    'signal',
-    'start',
-    'status',
-    'stop',
-    'tail',
-    'update',
-    'version'
-]
 
 
 class Console:
 
     def __init__(self, stdin=None, stdout=None):
-        self.sock = sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_address = ('localhost', 10000)
         self.prompt = '> '
+        self.buf = 128
 
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -70,42 +47,37 @@ class Console:
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
-            print('closing socket')
-            self.sock.close()
-            sys.exit("exiting...")
+            try:
+                LOG.debug('closing socket')
+                self.sock.close()
+            finally:
+                sys.exit("exiting...")
 
     def run_forever(self):
         while 1:
             command = input(self.prompt)
-            self.send_stuff(command)
+            self.send_to_daemon(command)
 
-    def send_stuff(self, command):
+    def send_to_daemon(self, command):
 
         # Create a TCP/IP socket
         try:
-            print('connecting to %s port %s' % self.server_address)
+            LOG.debug('connecting to %s port %s' % self.server_address)
             self.sock.connect(self.server_address)
         except OSError as e:
-            print('already connected')
+            LOG.debug('already connected')
 
         try:
-            
-            # Send data
-            message = command.encode()
-            print('sending "%s"' % message)
-            self.sock.sendall(message)
+            # Send to daemon
+            b_command = command.encode()
+            LOG.info('to taskmasterd %s' % b_command)
+            self.sock.sendall(b_command)
 
-            # Look for the response
-            amount_received = 0
-            amount_expected = len(message)
-            
-            while amount_received < amount_expected:
-                data = self.sock.recv(16)
-                amount_received += len(data)
-                print('received "%s"' % data)
+            # Get response       
+            data = self.sock.recv(self.buf)
 
         finally:
-            print('done')
+            LOG.info('from taskmasterd "%s"' % data)
 
 
 def main():

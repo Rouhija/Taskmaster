@@ -14,13 +14,14 @@ import signal
 import socket
 import logging
 from subprocess import Popen
+from time import gmtime, strftime, time
 from taskmaster.config import Config
 from os.path import dirname, realpath
 
 parent_dir = dirname(dirname(realpath(__file__)))
 
 logging.basicConfig(
-    filename=f'{parent_dir}/logs/taskmasterd.log',
+    # filename=f'{parent_dir}/logs/taskmasterd.log',
     level=logging.DEBUG,
     format='%(levelname)s:%(asctime)s ⁠— %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
@@ -46,14 +47,18 @@ class Taskmasterd:
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
-            for pid in self.processes:
-                LOG.debug(f'killing {pid}')
-                pid.kill()
-            self.connection.close()
-            sys.exit("taskmasterd received terminating signal... quitting")
+            try:
+                for p_info in self.processes:
+                    LOG.debug(f'killing {p_info["pid"]}')
+                    p_info['p'].kill()
+                self.connection.close()
+            finally:
+                LOG.debug('taskmasterd shut down')
+                sys.exit()
 
     def listen_sockets(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create a TCP/IP socket
+        # Create a TCP/IP socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind(self.server_address)
         self.sock.listen(1)
 
@@ -62,6 +67,7 @@ class Taskmasterd:
         self.set_signals()
         for k, _ in self.programs.items():
             self.init_program(k)
+        self.program_status()
         self.serve_forever()
 
     def serve_forever(self):
@@ -83,6 +89,7 @@ class Taskmasterd:
                 LOG.debug(f'all data from received from {self.client_address}')
 
     def init_program(self, prog):
+        p_info = {}
         conf = self.programs[prog]
         log_stdout = open(conf['stdout_logfile'], 'w+')
         log_stderr = open(conf['stderr_logfile'], 'w+')
@@ -91,7 +98,16 @@ class Taskmasterd:
             stdout=log_stdout,
             stderr=log_stderr
         )
-        self.processes.append(p)
+        p_info['p'] = p
+        p_info['pid'] = p.pid
+        p_info['start'] = time()
+        self.processes.append(p_info)
+
+    def program_status(self):
+        for p_info in self.processes:
+            print(p_info['p'].poll())
+            print(p_info['pid'])
+            print(strftime('%H:%M:%S', gmtime(time() - p_info['start'])))
 
     def daemonize(self):
         """
@@ -125,7 +141,7 @@ class Taskmasterd:
 def main():
     config = Config()
     d = Taskmasterd(config.conf)
-    d.daemonize()
+    # d.daemonize()
     d.start()
     
 if __name__ == '__main__':
