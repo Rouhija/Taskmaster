@@ -58,11 +58,14 @@ class Console:
         e = Editor()
         while 1:
             command = e.read_in()
-            if command == None : break
+            if command == None or command == 'quit' or command == 'exit' : break
             elif command == '' : pass
             elif parser(command):
                 response = self.send_to_daemon(command)
-                self.status(response)
+                if response is None or response == 'error':
+                    LOG.warn('No response from daemon')
+                else:
+                    self.status(response)
         self.cleanup()
 
 
@@ -83,11 +86,11 @@ class Console:
                 print('pid {}, '.format(pid, width=10), end ='')
                 print('uptime {:{width}}'.format(uptime, width=10))
 
-# '{:{width}.{prec}f}'.format(2.7182, width=5, prec=2)
-
     def send_to_daemon(self, command):
 
-        # Create a TCP/IP socket
+        response = None
+
+        # Connect to daemon
         try:
             LOG.debug('connecting to %s port %s' % self.server_address)
             self.sock.connect(self.server_address)
@@ -97,15 +100,18 @@ class Console:
         try:
             # Send to daemon
             b_command = command.encode()
-            LOG.info('to taskmasterd %s' % b_command)
-            self.sock.sendall(b_command)
+            LOG.info('Sending to taskmasterd %s' % b_command)
+            try:
+                self.sock.sendall(b_command)
+            except BrokenPipeError as e:
+                LOG.error(f'Daemon is not responding: {e}')
 
             # Get response       
-            data = self.sock.recv(self.buf).decode()
+            response = self.sock.recv(self.buf).decode()
+            LOG.info('Received from taskmasterd "%s"' % response)
 
         finally:
-            LOG.info('from taskmasterd "%s"' % data)
-            return data
+            return response
 
     def cleanup(self):
         try:

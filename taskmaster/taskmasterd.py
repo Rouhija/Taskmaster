@@ -67,7 +67,6 @@ class Taskmasterd:
         self.set_signals()
         for k, _ in self.programs.items():
             self.init_program(k)
-        self.program_status()
         self.serve_forever()
 
 
@@ -93,12 +92,10 @@ class Taskmasterd:
 
     def action(self, command):
         command = command.split(' ')
-        if command[0] == 'reload':
-            # os.execv(__file__, sys.argv)
-            return 'not implemented'
-        elif command[0] == 'status':
-            return self.program_status()
-        return '1'
+        try:
+            return self.fmap[command[0]](self, command)
+        except:
+            return None
 
 
     def init_program(self, prog):
@@ -118,7 +115,7 @@ class Taskmasterd:
         self.processes.append(p_info)
 
 
-    def program_status(self):
+    def program_status(self, command):
         status = ''
         for p_info in self.processes:
             status += p_info['name'] + ' '
@@ -126,6 +123,15 @@ class Taskmasterd:
             status += str(p_info['pid']) + ' '
             status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + '|'
         return status
+
+    
+    def stop(self, command):
+        return 'error'
+
+
+    def reload(self, command):
+        # os.execv(__file__, sys.argv)
+        return 'error'
 
 
     def daemonize(self):
@@ -156,6 +162,11 @@ class Taskmasterd:
         self.stderr = sys.stderr = sys.__stderr__ = open("/dev/null", "w")
         os.setsid()
         os.umask(self.umask)
+
+    fmap = {
+        'status': program_status,
+        'stop': stop
+    }
 
 
 def logger_options(nodaemon):

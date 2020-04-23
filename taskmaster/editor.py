@@ -113,7 +113,7 @@ class Editor:
         b'\r': linebreak,
         b'\n': linebreak,
         b'\x03': terminate,
-        b'\x04': terminate,
+        b'\x04': terminate
     }
 
 
