@@ -1,7 +1,8 @@
+import os
 import sys
 import tty
 import termios
-import os
+from taskmaster.hist import History
 
 
 UP = b'\x1b[A'
@@ -42,6 +43,7 @@ DEFAULT_CMDS = [
 
 
 class _Getch:
+
     def __call__(self):
         fd = sys.stdin.fileno()
         restore = termios.tcgetattr(fd)
@@ -54,69 +56,85 @@ class _Getch:
 
 
 class Editor:
-    
+ 
     def __init__(self):
         self.prompt = 'taskmasterctl> '
-        self.x_pos = 0
-        self.clear_n = 0
         self.inkey = _Getch()
+        self.hist = History()
+        self.x_pos = 0
 
     def read_in(self):
         stdin = ''
         print(self.prompt, end='', flush=True)
         while 1:
             key = self.inkey()
-            # self.clear_n = len(stdin)
+
+            # Terminating keys
             if key == b'\r' or key == b'\n':
                 print()
                 break
             elif key == CTRLC or key == CTRLD:
                 print()
                 return None
-            if key == UP:
-                continue
-            elif key == DOWN:
-                continue
-            elif key == RIGHT:
-                if self.x_pos == len(stdin):
-                    continue
-                else:
-                    # print(key.decode(), end="", flush=True)
-                    self.x_pos += 1
-            elif key == LEFT:
-                if self.x_pos == 0:
-                    continue
-                else:
-                    # print(key.decode(), end="", flush=True)
-                    self.x_pos -= 1
+
+            if key == UP or key == DOWN or key == RIGHT or key == LEFT:
+                stdin = self.arrows(stdin, key)
             elif key == TAB:
-                if len(stdin) > 0:
-                    for c in DEFAULT_CMDS:
-                        if c.startswith(stdin):
-                            stdin = c
-                            break
+                stdin = self.complete(stdin)
             elif key == BS:
-                if self.x_pos > 0 and len(stdin):
-                    stdin = self.erase(stdin, self.x_pos - 1)
-                    self.x_pos -= 1
+                pass
+                # if self.x_pos > 0 and len(stdin):
+                #     stdin = self.erase(stdin, self.x_pos - 1)
+                #     self.x_pos -= 1
             elif key == DEL:
-                if self.x_pos < len(stdin):
-                    stdin = self.erase(stdin, self.x_pos)
+                pass
+                # if self.x_pos < len(stdin):
+                #     stdin = self.erase(stdin, self.x_pos)
             else:
                 self.x_pos += 1
                 stdin += key.decode()
-            self.clear(self.clear_n)
+
+            self.clear()
             print(stdin, end="", flush=True)
             # print(f'  x: {self.x_pos}  in_len: {len(stdin)} input: {stdin}', end="", flush=True)
+        self.hist.add(stdin)
         return stdin
 
+    def arrows(self, stdin, key):
+        if key == UP:
+            stdin = self.hist.get_up() or stdin
+        elif key == DOWN:
+            stdin = self.hist.get_down() or stdin
+        elif key == RIGHT:
+            pass
+        #     if self.x_pos == len(stdin):
+        #         continue
+        #     else:
+        #         self.x_pos += 1
+        #         stdin += key.decode()
+        elif key == LEFT:
+            pass
+        #     if self.x_pos == 0:
+        #         continue
+        #     else:
+        #         self.x_pos -= 1
+        #         stdin += key.decode()
+        return stdin
 
-    def clear(self, n):
+    def complete(self, stdin):
+        if len(stdin) > 0:
+            for c in DEFAULT_CMDS:
+                if c.startswith(stdin):
+                    stdin = c
+                    break
+        return stdin
+
+    def clear(self):
         print('\r', end='', flush=True)
         print(self.prompt, end='', flush=True)
 
-
-    def erase(self, str, n):
+    @staticmethod
+    def erase(str, n):
         return str[:n] + str[n + 1:]
 
 
