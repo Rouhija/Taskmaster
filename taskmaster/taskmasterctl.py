@@ -14,6 +14,7 @@ import signal
 import logging
 from taskmaster.editor import Editor
 from taskmaster.config import Config
+from taskmaster.utils import parser
 
 logging.basicConfig(
     # filename='/var/log/taskmaster/taskmasterctl.log',
@@ -40,7 +41,7 @@ class Console:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_address = ('localhost', 10000)
         self.prompt = '> '
-        self.buf = 128
+        self.buf = 256
 
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -48,18 +49,16 @@ class Console:
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
-            try:
-                LOG.debug('closing socket')
-                self.sock.close()
-            finally:
-                sys.exit("exiting...")
+            self.cleanup()
 
     def run_forever(self):
         e = Editor()
         while 1:
             command = e.read_in()
             if command == None : break
-            self.send_to_daemon(command)
+            if parser(command):
+                self.send_to_daemon(command)
+        self.cleanup()
 
     def send_to_daemon(self, command):
 
@@ -81,6 +80,13 @@ class Console:
 
         finally:
             LOG.info('from taskmasterd "%s"' % data)
+
+    def cleanup(self):
+        try:
+            LOG.debug('closing socket')
+            self.sock.close()
+        finally:
+            sys.exit()
 
 
 def main():

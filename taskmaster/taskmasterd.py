@@ -5,7 +5,9 @@
 Usage: %s [options]
 
 Options:
+-h/--help -- display options
 -c/--configuration <file> -- configuration file path (searches if not given)
+-n/--nodaemon -- run taskmasterd in the foreground
 """
 
 import os
@@ -13,21 +15,15 @@ import sys
 import signal
 import socket
 import logging
+import argparse
 from subprocess import Popen
 from time import gmtime, strftime, time
 from taskmaster.config import Config
 from os.path import dirname, realpath
 
-parent_dir = dirname(dirname(realpath(__file__)))
-
-logging.basicConfig(
-    filename=f'{parent_dir}/logs/taskmasterd.log',
-    level=logging.DEBUG,
-    format='%(levelname)s:%(asctime)s ⁠— %(message)s',
-    datefmt='%d/%m/%Y %H:%M:%S'
-)
 
 LOG = logging.getLogger(__name__)
+
 
 class Taskmasterd:
 
@@ -35,32 +31,36 @@ class Taskmasterd:
         self.conf = conf
         self.directory = "/"
         self.programs = conf['programs']
-        self.umask = 22
+        self.buf = 256
+        self.umask = 0
         self.processes = []
         self.server_address = ('localhost', 10000)
         self.client_address = None
         self.connection = None
 
+
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
+
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
             try:
                 for p_info in self.processes:
-                    LOG.debug(f'killing {p_info["pid"]}')
+                    LOG.debug(f'killing pid {p_info["pid"]}')
                     p_info['p'].kill()
                 self.connection.close()
             finally:
                 LOG.debug('taskmasterd shut down')
                 sys.exit()
 
+
     def listen_sockets(self):
-        # Create a TCP/IP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind(self.server_address)
         self.sock.listen(1)
+
 
     def start(self):
         self.listen_sockets()
@@ -70,23 +70,35 @@ class Taskmasterd:
         self.program_status()
         self.serve_forever()
 
+
     def serve_forever(self):
         while 1:
             LOG.debug('waiting for a connection')
             self.connection, self.client_address = self.sock.accept()
             try:
                 LOG.debug(f'connection from {self.client_address}')
-                # Receive the data in small chunks and retransmit it
+                # Receive data from control program
                 while True:
                     data = self.connection.recv(16)
                     LOG.debug(f'received "{data}"')
                     if data:
-                        LOG.debug('sending data back to the client')
-                        self.connection.sendall(data)
+                        response = self.action(data.decode())
+                        LOG.debug('sending response back to the client')
+                        self.connection.sendall(response.encode())
                     else:
                         break
             finally:
                 LOG.debug(f'all data from received from {self.client_address}')
+
+
+    def action(self, command):
+        command = command.split(' ')
+        if command[0] == 'reload':
+            LOG.warn('reload not implemented yet')
+        elif command[0] == 'status':
+            return self.program_status()
+        return '1'
+
 
     def init_program(self, prog):
         p_info = {}
@@ -103,11 +115,15 @@ class Taskmasterd:
         p_info['start'] = time()
         self.processes.append(p_info)
 
+
     def program_status(self):
+        status = ''
         for p_info in self.processes:
-            print(p_info['p'].poll())
-            print(p_info['pid'])
-            print(strftime('%H:%M:%S', gmtime(time() - p_info['start'])))
+            status += str(p_info['p'].poll()) + ' '
+            status += str(p_info['pid']) + ' '
+            status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + ' '
+        return status
+
 
     def daemonize(self):
         """
@@ -120,9 +136,9 @@ class Taskmasterd:
         """
         pid = os.fork()
         if pid != 0:
-            LOG.debug("supervisord forked; parent exiting")
+            LOG.debug("taskmasterd forked; parent exiting")
             os._exit(0)
-        LOG.debug("daemonizing the supervisord process")
+        LOG.debug("daemonizing the taskmasterd process")
         try:
             os.chdir(self.directory)
         except OSError as err:
@@ -138,11 +154,36 @@ class Taskmasterd:
         os.setsid()
         os.umask(self.umask)
 
+
+def logger_options(nodaemon):
+    if nodaemon:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )
+    else:
+        parent_dir = dirname(dirname(realpath(__file__)))
+        logging.basicConfig(
+            filename=f'{parent_dir}/logs/taskmasterd.log',
+            level=logging.DEBUG,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )  
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file.", action="store_true")
+    parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
+    args = parser.parse_args()
+    logger_options(args.nodaemon)
     config = Config()
     d = Taskmasterd(config.conf)
-    d.daemonize()
+    if not args.nodaemon:
+        d.daemonize()
     d.start()
-    
+
+
 if __name__ == '__main__':
     main()

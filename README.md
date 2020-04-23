@@ -49,8 +49,10 @@ taskmasterctl> quit
 ## Dependencies
 
 ### To-Do
-- [ ] Communicate to taskmasterd from taskmasterctl over sockets
+- [ ] Check command syntax
+- [ ] Execute in daemon
 - [ ] Config file from cmd args
+- [ ] logs to /var/log/
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))

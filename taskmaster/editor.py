@@ -3,32 +3,7 @@ import sys
 import tty
 import termios
 from taskmaster.hist import History
-
-
-DEFAULT_CMDS = [
-    'add',
-    'avail',
-    'clear',
-    'exit',
-    'fg',
-    'maintail',
-    'open',
-    'pid',
-    'quit',
-    'reload'
-    'remove',
-    'reread',
-    'restart',
-    'shutdown',
-    'signal',
-    'start',
-    'status',
-    'stop',
-    'tail',
-    'update',
-    'version'
-]
-
+from taskmaster.utils import DEFAULT_CMDS
 
 class _Getch:
 
