@@ -15,9 +15,12 @@ import logging
 from taskmaster.editor import Editor
 from taskmaster.config import Config
 from taskmaster.utils import parser
+from os.path import dirname, realpath
+
+parent_dir = dirname(dirname(realpath(__file__)))
 
 logging.basicConfig(
-    # filename='/var/log/taskmaster/taskmasterctl.log',
+    filename=f'{parent_dir}/logs/taskmasterctl.log',
     level=logging.DEBUG,
     format='%(levelname)s:%(asctime)s ⁠— %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
@@ -31,7 +34,7 @@ snake = """\
           '.'.            .'.'`  '---'`  `
             '.`'--....--'`.'
               `'--....--'`
-    \x1B[3mTaskmaster\x1B[23m ©srouhe
+    \x1B[3mTaskmaster\x1B[23m
 """
 
 
@@ -56,9 +59,31 @@ class Console:
         while 1:
             command = e.read_in()
             if command == None : break
-            if parser(command):
-                self.send_to_daemon(command)
+            elif command == '' : pass
+            elif parser(command):
+                response = self.send_to_daemon(command)
+                self.status(response)
         self.cleanup()
+
+
+    def status(self, response):
+        res = response.split('|')
+        for proc in res:
+            if proc:
+                proc = proc.split(' ')
+                name = proc[0].upper()
+                try:
+                    status = self.p_status[proc[1]]
+                except KeyError:
+                    status = 'UNKNOWN'
+                pid = proc[2]
+                uptime = proc[3]
+                print('{:{width}}'.format(name, width=25), end ='')
+                print('{:{width}}'.format(status, width=10), end ='')
+                print('pid {}, '.format(pid, width=10), end ='')
+                print('uptime {:{width}}'.format(uptime, width=10))
+
+# '{:{width}.{prec}f}'.format(2.7182, width=5, prec=2)
 
     def send_to_daemon(self, command):
 
@@ -76,10 +101,11 @@ class Console:
             self.sock.sendall(b_command)
 
             # Get response       
-            data = self.sock.recv(self.buf)
+            data = self.sock.recv(self.buf).decode()
 
         finally:
             LOG.info('from taskmasterd "%s"' % data)
+            return data
 
     def cleanup(self):
         try:
@@ -87,6 +113,10 @@ class Console:
             self.sock.close()
         finally:
             sys.exit()
+
+    p_status = {
+        'None': 'RUNNING'
+    }
 
 
 def main():

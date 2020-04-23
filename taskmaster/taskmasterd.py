@@ -32,7 +32,7 @@ class Taskmasterd:
         self.directory = "/"
         self.programs = conf['programs']
         self.buf = 256
-        self.umask = 0
+        self.umask = 0o22
         self.processes = []
         self.server_address = ('localhost', 10000)
         self.client_address = None
@@ -83,18 +83,19 @@ class Taskmasterd:
                     LOG.debug(f'received "{data}"')
                     if data:
                         response = self.action(data.decode())
-                        LOG.debug('sending response back to the client')
+                        LOG.debug(f'sending response [{response}] back to the client')
                         self.connection.sendall(response.encode())
                     else:
                         break
             finally:
-                LOG.debug(f'all data from received from {self.client_address}')
+                LOG.debug(f'Connection closed by client {self.client_address}')
 
 
     def action(self, command):
         command = command.split(' ')
         if command[0] == 'reload':
-            LOG.warn('reload not implemented yet')
+            # os.execv(__file__, sys.argv)
+            return 'not implemented'
         elif command[0] == 'status':
             return self.program_status()
         return '1'
@@ -110,6 +111,7 @@ class Taskmasterd:
             stdout=log_stdout,
             stderr=log_stderr
         )
+        p_info['name'] = prog
         p_info['p'] = p
         p_info['pid'] = p.pid
         p_info['start'] = time()
@@ -119,9 +121,10 @@ class Taskmasterd:
     def program_status(self):
         status = ''
         for p_info in self.processes:
+            status += p_info['name'] + ' '
             status += str(p_info['p'].poll()) + ' '
             status += str(p_info['pid']) + ' '
-            status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + ' '
+            status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + '|'
         return status
 
 
@@ -172,11 +175,16 @@ def logger_options(nodaemon):
         )  
 
 
-def main():
+def arg_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file.", action="store_true")
     parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument("-m", "--umask", help="Octal number (e.g. 022) representing the umask that should be used by taskmasterd after it starts.", default='022')
+    return parser.parse_args()
+
+
+def main():
+    args = arg_parser()
     logger_options(args.nodaemon)
     config = Config()
     d = Taskmasterd(config.conf)
