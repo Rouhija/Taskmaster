@@ -5,18 +5,6 @@ import termios
 from taskmaster.hist import History
 
 
-UP = b'\x1b[A'
-DOWN = b'\x1b[B'
-RIGHT = b'\x1b[C'
-LEFT = b'\x1b[D'
-ESC = b'\x1b'
-BS = b'\x7f'
-DEL = b'\x1b[3'
-TAB = b'\t'
-CTRLC = b'\x03'
-CTRLD = b'\x04'
-
-
 DEFAULT_CMDS = [
     'add',
     'avail',
@@ -56,7 +44,7 @@ class _Getch:
 
 
 class Editor:
- 
+
     def __init__(self):
         self.prompt = 'taskmasterctl> '
         self.inkey = _Getch()
@@ -68,60 +56,37 @@ class Editor:
         print(self.prompt, end='', flush=True)
         while 1:
             key = self.inkey()
-
-            # Terminating keys
-            if key == b'\r' or key == b'\n':
-                print()
-                break
-            elif key == CTRLC or key == CTRLD:
-                print()
-                return None
-
-            if key == UP or key == DOWN or key == RIGHT or key == LEFT:
-                stdin = self.arrows(stdin, key)
-            elif key == TAB:
-                stdin = self.complete(stdin)
-            elif key == BS:
-                pass
-                # if self.x_pos > 0 and len(stdin):
-                #     stdin = self.erase(stdin, self.x_pos - 1)
-                #     self.x_pos -= 1
-            elif key == DEL:
-                pass
-                # if self.x_pos < len(stdin):
-                #     stdin = self.erase(stdin, self.x_pos)
+            if key in self.fterm:
+                return self.fterm[key](self, stdin)
+            elif key in self.fmap:
+                stdin = self.fmap[key](self, stdin, key)
             else:
                 self.x_pos += 1
                 stdin += key.decode()
-
             self.clear()
             print(stdin, end="", flush=True)
             # print(f'  x: {self.x_pos}  in_len: {len(stdin)} input: {stdin}', end="", flush=True)
         self.hist.add(stdin)
         return stdin
 
-    def arrows(self, stdin, key):
-        if key == UP:
-            stdin = self.hist.get_up() or stdin
-        elif key == DOWN:
-            stdin = self.hist.get_down() or stdin
-        elif key == RIGHT:
-            pass
-        #     if self.x_pos == len(stdin):
-        #         continue
-        #     else:
-        #         self.x_pos += 1
-        #         stdin += key.decode()
-        elif key == LEFT:
-            pass
-        #     if self.x_pos == 0:
-        #         continue
-        #     else:
-        #         self.x_pos -= 1
-        #         stdin += key.decode()
+    def arrow_up(self, stdin, key):
+        return self.hist.get_up() or stdin
+
+    def arrow_down(self, stdin, key):
+        return self.hist.get_down() or stdin
+
+    def arrow_right(self, stdin, key):
+        if self.x_pos < len(stdin):
+            self.x_pos += 1
+        #     stdin += key.decode()
         return stdin
 
-    def complete(self, stdin):
+    def arrow_left(self, stdin, key):
+        if self.x_pos:
+            self.x_pos -= 1
+        return stdin
+
+    def complete(self, stdin, key):
         if len(stdin) > 0:
             for c in DEFAULT_CMDS:
                 if c.startswith(stdin):
@@ -129,13 +94,52 @@ class Editor:
                     break
         return stdin
 
+    def backspace(self, stdin, key):
+        if self.x_pos > 0 and len(stdin):
+            stdin = self.erase(stdin, self.x_pos - 1)
+            self.x_pos -= 1
+        return stdin
+
+    def delete(self, stdin, key):
+        if self.x_pos < len(stdin):
+            stdin = self.erase(stdin, self.x_pos)
+        return stdin
+
+    def linebreak(self, stdin):
+        print()
+        self.hist.add(stdin)
+        return stdin
+
+    def terminate(self, stdin):
+        print()
+        return None
+
     def clear(self):
         print('\r', end='', flush=True)
+        sys.stdout.write("\033[K")
+        sys.stdout.flush()
         print(self.prompt, end='', flush=True)
 
     @staticmethod
     def erase(str, n):
         return str[:n] + str[n + 1:]
+
+    fmap = {
+        b'\x1b[A': arrow_up,
+        b'\x1b[B': arrow_down,
+        b'\x1b[C': arrow_right,
+        b'\x1b[D': arrow_left,
+        b'\t': complete,
+        b'\x7f': backspace,
+        b'\x1b[3': delete
+    }
+
+    fterm = {
+        b'\r': linebreak,
+        b'\n': linebreak,
+        b'\x03': terminate,
+        b'\x04': terminate,
+    }
 
 
 def main():

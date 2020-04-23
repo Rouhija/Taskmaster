@@ -12,6 +12,7 @@ import sys
 import socket
 import signal
 import logging
+from taskmaster.editor import Editor
 from taskmaster.config import Config
 
 logging.basicConfig(
@@ -54,8 +55,10 @@ class Console:
                 sys.exit("exiting...")
 
     def run_forever(self):
+        e = Editor()
         while 1:
-            command = input(self.prompt)
+            command = e.read_in()
+            if command == None : break
             self.send_to_daemon(command)
 
     def send_to_daemon(self, command):

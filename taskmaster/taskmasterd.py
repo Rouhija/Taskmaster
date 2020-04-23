@@ -21,7 +21,7 @@ from os.path import dirname, realpath
 parent_dir = dirname(dirname(realpath(__file__)))
 
 logging.basicConfig(
-    # filename=f'{parent_dir}/logs/taskmasterd.log',
+    filename=f'{parent_dir}/logs/taskmasterd.log',
     level=logging.DEBUG,
     format='%(levelname)s:%(asctime)s ⁠— %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
@@ -141,7 +141,7 @@ class Taskmasterd:
 def main():
     config = Config()
     d = Taskmasterd(config.conf)
-    # d.daemonize()
+    d.daemonize()
     d.start()
     
 if __name__ == '__main__':
