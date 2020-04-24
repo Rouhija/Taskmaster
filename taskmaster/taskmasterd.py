@@ -6,7 +6,7 @@ Usage: %s [options]
 
 Options:
 -h/--help -- display options
--c/--configuration <file> -- configuration file path (searches if not given)
+-c/--configuration <file> -- configuration file path
 -n/--nodaemon -- run taskmasterd in the foreground
 """
 
@@ -46,14 +46,19 @@ class Taskmasterd:
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
-            try:
-                for p_info in self.processes:
-                    LOG.debug(f'killing pid {p_info["pid"]}')
-                    p_info['p'].kill()
-                self.connection.close()
-            finally:
-                LOG.debug('taskmasterd shut down')
-                sys.exit()
+            self.cleanup()
+
+
+    def cleanup(self):
+        try:
+            for p_info in self.processes:
+                LOG.debug(f'killing pid {p_info["pid"]}')
+                p_info['p'].kill()
+            self.connection.sendall('taskmasterd shut down successfully'.encode())
+            self.connection.close()
+        finally:
+            LOG.debug('taskmasterd shut down')
+            sys.exit()
 
 
     def listen_sockets(self):
@@ -75,16 +80,21 @@ class Taskmasterd:
         conf = self.programs[prog]
         log_stdout = open(conf['stdout_logfile'], 'w+')
         log_stderr = open(conf['stderr_logfile'], 'w+')
-        p = Popen(
-            [conf['command']],
-            stdout=log_stdout,
-            stderr=log_stderr
-        )
+        if conf['autostart'] == 'true':
+            p = Popen(
+                [conf['command']],
+                stdout=log_stdout,
+                stderr=log_stderr
+            )
+            p_info['p'] = p
+            p_info['state'] = 'RUNNING'
+            p_info['start'] = time()
+        else:
+            p_info['p'] = None
+            p_info['state'] = 'STOPPED'
+            p_info['start'] = None
         p_info['name'] = prog
-        p_info['p'] = p
         p_info['pid'] = p.pid
-        p_info['start'] = time()
-        p_info['state'] = 'RUNNING'
         self.processes.append(p_info)
 
 
@@ -99,11 +109,18 @@ class Taskmasterd:
                     data = self.connection.recv(16)
                     LOG.debug(f'received "{data}"')
                     if data:
+                        if data.decode() == 'shutdown':
+                            self.cleanup()
                         response = self.action(data.decode())
                         LOG.debug(f'sending response [{response}] back to the client')
-                        self.connection.sendall(response.encode())
+                        if response:
+                            self.connection.sendall(response.encode())
+                        else:
+                            self.connection.sendall(f'no actions for `{data.decode()}`'.encode())
                     else:
                         break
+            except OSError as e:
+                LOG.error(e)
             finally:
                 LOG.debug(f'All data received from {self.client_address}')
 
@@ -119,13 +136,13 @@ class Taskmasterd:
     def prog_status(self, command):
         status = ''
         for p_info in self.processes:
-            status += p_info['name'] + ' '
+            status += '{:{width}}'.format(p_info['name'], width=25)
             if p_info['p'].poll() is None:
-                status += p_info['state'] + ' '
+                status += '{:{width}}'.format(p_info['state'], width=10)
             else:
-                status += 'TERMINATED'
-            status += str(p_info['pid']) + ' '
-            status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + '|'
+                status += '{:{width}}'.format('STOPPED', width=10)
+            status += 'pid {}, '.format(p_info['pid'], width=10)
+            status += 'uptime {:{width}} |'.format(strftime('%H:%M:%S', gmtime(time() - p_info['start'])), width=10)
         return status
 
 
@@ -136,6 +153,7 @@ class Taskmasterd:
             for i, proc in enumerate(self.processes):
                 if proc['name'] == name or name == 'all':
                     if proc['state'] == 'STOPPED':
+                        LOG.info(f'Starting process {proc["pid"]}')
                         proc['p'].send_signal(signal.SIGCONT)
                         resp += f'{proc["name"]} started|'
                         self.processes[i]['state'] = 'RUNNING'
@@ -151,12 +169,27 @@ class Taskmasterd:
             for i, proc in enumerate(self.processes):
                 if proc['name'] == name or name == 'all':
                     if proc['state'] == 'RUNNING':
+                        LOG.info(f'Stopping process {proc["pid"]}')
                         proc['p'].send_signal(signal.SIGSTOP)
                         resp += f'{proc["name"]} stopped|'
                         self.processes[i]['state'] = 'STOPPED'
                     else:
                         resp += f'{proc["name"]} is already stopped|'
         return resp
+
+
+    def prog_restart(self, command):
+        # LOG.info(f'Restarting programs {command[1:]}')
+        # resp = self.prog_stop(command)
+        # resp = self.prog_start(command)
+        # resp = resp.replace('stopped', 'restarted')
+        return 'error'
+
+
+    def reread_conf(self, command):
+        config = Config()
+        self.conf = config.conf
+        return 'Configuration file reread successfully - run update to apply changes'
 
 
     def reload(self, command):
@@ -196,7 +229,9 @@ class Taskmasterd:
     fmap = {
         'status': prog_status,
         'start': prog_start,
-        'stop': prog_stop
+        'stop': prog_stop,
+        'reread': reread_conf,
+        'restart': prog_restart
     }
 
 

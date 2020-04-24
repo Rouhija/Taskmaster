@@ -3,20 +3,14 @@ import pkg_resources
 VERSION = pkg_resources.require("taskmaster")[0].version
 
 DEFAULT_CMDS = [
-    # 'add',
-    # 'avail',
     # 'clear',
     'exit',
-    # 'fg',
-    # 'maintail',
-    # 'open',
-    # 'pid',
     'quit',
     'reload',
     # 'remove',
-    # 'reread',
-    # 'restart',
-    # 'shutdown',
+    'reread',
+    'restart',
+    'shutdown',
     # 'signal',
     'start',
     'status',
@@ -27,24 +21,13 @@ DEFAULT_CMDS = [
 ]
 
 ARG_CMDS = [
-    # 'add',
-    # 'avail',
     # 'clear',
     'exit',
-    # 'fg',
-    # 'maintail',
-    # 'open',
-    # 'pid',
     'reload',
-    # 'remove',
-    # 'reread',
-    # 'restart',
-    # 'shutdown',
-    # 'signal',
+    'restart',
     'start',
     'stop',
     # 'tail',
-    # 'update'
 ]
 
 

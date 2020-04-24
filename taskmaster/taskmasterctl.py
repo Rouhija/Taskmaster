@@ -46,13 +46,16 @@ class Console:
         self.prompt = '> '
         self.buf = 256
 
+
     def set_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
+
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.cleanup()
+
 
     def run_forever(self):
         e = Editor()
@@ -61,34 +64,20 @@ class Console:
             if command == None or command == 'quit' or command == 'exit' : break
             elif command == '' : pass
             elif parser(command):
-                response = self.send_to_daemon(command)
+                response = self.send_to_daemon(command.lower())
                 if response is None or response == 'error':
                     LOG.warn('No response from daemon')
                 else:
-                    self.fmap[command.split(' ')[0]](self, response)
+                    self.echo_resp(response)
         self.cleanup()
 
 
-    def resp_general(self, response):
+    def echo_resp(self, response):
         resp = response.split('|')
         for r in resp:
             if r:
                 print(r)
 
-
-    def resp_status(self, response):
-        res = response.split('|')
-        for proc in res:
-            if proc:
-                proc = proc.split(' ')
-                name = proc[0].upper()
-                status = proc[1]
-                pid = proc[2]
-                uptime = proc[3]
-                print('{:{width}}'.format(name, width=25), end ='')
-                print('{:{width}}'.format(status, width=10), end ='')
-                print('pid {}, '.format(pid, width=10), end ='')
-                print('uptime {:{width}}'.format(uptime, width=10))
 
     def send_to_daemon(self, command):
 
@@ -96,10 +85,10 @@ class Console:
 
         # Connect to daemon
         try:
-            LOG.debug('connecting to %s port %s' % self.server_address)
+            LOG.info('connecting to %s port %s' % self.server_address)
             self.sock.connect(self.server_address)
         except OSError as e:
-            LOG.debug('already connected')
+            LOG.debug(e)
 
         try:
             # Send to daemon
@@ -123,12 +112,6 @@ class Console:
             self.sock.close()
         finally:
             sys.exit()
-
-    fmap = {
-        'status': resp_status,
-        'stop': resp_general,
-        'start': resp_general
-    }
 
 
 def main():

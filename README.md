@@ -7,52 +7,41 @@ virtualenv venv -p python3 && source venv/bin/activate
 python3 setup.py develop
 ```
 
-## Supervisor 
-```
-long_script                      RUNNING   pid 32676, uptime 0:00:29
-```
-clear
-```
-Error: clear requires a process name
-clear <name>            Clear a process' log files.
-clear <name> <name>     Clear multiple process' log files
-clear all               Clear all process' log files
-```
-
 ## Usage
 
-Launch
+Launch server
 ```sh
-taskmasterd -c myconfig.yml
+taskmasterd [-c/--configuration FILE] [-n/--nodaemon]
 ```
 
-Reread config and start
-```sh
-taskmasterctl reread
-taskmaster update
-```
-
-Interactive mode
+Run client in interactive mode
 ```sh
 taskmasterctl
 ```
 
-Follow up commands
-```sh
-taskmasterctl> help
-taskmasterctl> stop <program>
-taskmasterctl> restart <program>
-taskmasterctl> start <program>
-taskmasterctl> quit
-```
+## Commands
+| CMD | ACTION |
+|---------|---------|
+| help | Display commands |
+| status | Display processes |
+| start <name> | Start program |
+| stop <name> | Stop program |
+| restart <name> | Restart program |
+| clear <name> | Clear program log files |
+| tail <name> <stdout/stderr> <n> | Read from program logs |
+| reread | Reread configuration file |
+| update | Apply configuration file changes |
+| shutdown | Terminate taskmasterd |
+| quit/exit | Exit |
 
 ## Dependencies
 
 ### To-Do
-- [ ] Check command syntax
-- [ ] Execute in daemon
+- [ ] Berrer parser and return curated command
 - [ ] Config file from cmd args
 - [ ] logs to /var/log/
+- [ ] Implement config file options
+- [ ] Print response as is in ctl and send line by line
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))
