@@ -65,20 +65,24 @@ class Console:
                 if response is None or response == 'error':
                     LOG.warn('No response from daemon')
                 else:
-                    self.status(response)
+                    self.fmap[command.split(' ')[0]](self, response)
         self.cleanup()
 
 
-    def status(self, response):
+    def resp_general(self, response):
+        resp = response.split('|')
+        for r in resp:
+            if r:
+                print(r)
+
+
+    def resp_status(self, response):
         res = response.split('|')
         for proc in res:
             if proc:
                 proc = proc.split(' ')
                 name = proc[0].upper()
-                try:
-                    status = self.p_status[proc[1]]
-                except KeyError:
-                    status = 'UNKNOWN'
+                status = proc[1]
                 pid = proc[2]
                 uptime = proc[3]
                 print('{:{width}}'.format(name, width=25), end ='')
@@ -120,8 +124,10 @@ class Console:
         finally:
             sys.exit()
 
-    p_status = {
-        'None': 'RUNNING'
+    fmap = {
+        'status': resp_status,
+        'stop': resp_general,
+        'start': resp_general
     }
 
 

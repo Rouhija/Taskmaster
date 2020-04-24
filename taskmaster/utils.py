@@ -18,13 +18,39 @@ DEFAULT_CMDS = [
     # 'restart',
     # 'shutdown',
     # 'signal',
-    # 'start',
+    'start',
     'status',
     'stop',
     # 'tail',
     # 'update',
     'version'
 ]
+
+ARG_CMDS = [
+    # 'add',
+    # 'avail',
+    # 'clear',
+    'exit',
+    # 'fg',
+    # 'maintail',
+    # 'open',
+    # 'pid',
+    'reload',
+    # 'remove',
+    # 'reread',
+    # 'restart',
+    # 'shutdown',
+    # 'signal',
+    'start',
+    'stop',
+    # 'tail',
+    # 'update'
+]
+
+
+def print_help(command):
+    if command == 'start' or command == 'stop':
+        print(f'usage: {command} <name> | all')
 
 
 def parser(s):
@@ -34,5 +60,8 @@ def parser(s):
         return False
     elif split[0] == 'version':
         print(VERSION)
+        return False
+    elif len(split) == 1 and split[0] in ARG_CMDS:
+        print_help(split[0])
         return False
     return True

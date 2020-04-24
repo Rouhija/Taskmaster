@@ -62,12 +62,30 @@ class Taskmasterd:
         self.sock.listen(1)
 
 
-    def start(self):
+    def start_server(self):
         self.listen_sockets()
         self.set_signals()
         for k, _ in self.programs.items():
             self.init_program(k)
         self.serve_forever()
+
+
+    def init_program(self, prog):
+        p_info = {}
+        conf = self.programs[prog]
+        log_stdout = open(conf['stdout_logfile'], 'w+')
+        log_stderr = open(conf['stderr_logfile'], 'w+')
+        p = Popen(
+            [conf['command']],
+            stdout=log_stdout,
+            stderr=log_stderr
+        )
+        p_info['name'] = prog
+        p_info['p'] = p
+        p_info['pid'] = p.pid
+        p_info['start'] = time()
+        p_info['state'] = 'RUNNING'
+        self.processes.append(p_info)
 
 
     def serve_forever(self):
@@ -87,7 +105,7 @@ class Taskmasterd:
                     else:
                         break
             finally:
-                LOG.debug(f'Connection closed by client {self.client_address}')
+                LOG.debug(f'All data received from {self.client_address}')
 
 
     def action(self, command):
@@ -98,35 +116,47 @@ class Taskmasterd:
             return None
 
 
-    def init_program(self, prog):
-        p_info = {}
-        conf = self.programs[prog]
-        log_stdout = open(conf['stdout_logfile'], 'w+')
-        log_stderr = open(conf['stderr_logfile'], 'w+')
-        p = Popen(
-            [conf['command']],
-            stdout=log_stdout,
-            stderr=log_stderr
-        )
-        p_info['name'] = prog
-        p_info['p'] = p
-        p_info['pid'] = p.pid
-        p_info['start'] = time()
-        self.processes.append(p_info)
-
-
-    def program_status(self, command):
+    def prog_status(self, command):
         status = ''
         for p_info in self.processes:
             status += p_info['name'] + ' '
-            status += str(p_info['p'].poll()) + ' '
+            if p_info['p'].poll() is None:
+                status += p_info['state'] + ' '
+            else:
+                status += 'TERMINATED'
             status += str(p_info['pid']) + ' '
             status += str(strftime('%H:%M:%S', gmtime(time() - p_info['start']))) + '|'
         return status
 
+
+    def prog_start(self, command):
+        resp = ''
+        command.pop(0)
+        for name in command:
+            for i, proc in enumerate(self.processes):
+                if proc['name'] == name or name == 'all':
+                    if proc['state'] == 'STOPPED':
+                        proc['p'].send_signal(signal.SIGCONT)
+                        resp += f'{proc["name"]} started|'
+                        self.processes[i]['state'] = 'RUNNING'
+                    else:
+                        resp += f'{proc["name"]} is already running|'
+        return resp        
+
     
-    def stop(self, command):
-        return 'error'
+    def prog_stop(self, command):
+        resp = ''
+        command.pop(0)
+        for name in command:
+            for i, proc in enumerate(self.processes):
+                if proc['name'] == name or name == 'all':
+                    if proc['state'] == 'RUNNING':
+                        proc['p'].send_signal(signal.SIGSTOP)
+                        resp += f'{proc["name"]} stopped|'
+                        self.processes[i]['state'] = 'STOPPED'
+                    else:
+                        resp += f'{proc["name"]} is already stopped|'
+        return resp
 
 
     def reload(self, command):
@@ -164,8 +194,9 @@ class Taskmasterd:
         os.umask(self.umask)
 
     fmap = {
-        'status': program_status,
-        'stop': stop
+        'status': prog_status,
+        'start': prog_start,
+        'stop': prog_stop
     }
 
 
@@ -201,7 +232,7 @@ def main():
     d = Taskmasterd(config.conf)
     if not args.nodaemon:
         d.daemonize()
-    d.start()
+    d.start_server()
 
 
 if __name__ == '__main__':
