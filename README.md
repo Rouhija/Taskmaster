@@ -19,6 +19,25 @@ Run client in interactive mode
 taskmasterctl
 ```
 
+## Config file options
+```yaml
+programs:
+    script:
+        command: REQUIRED
+        autostart: true/false
+        autorestart: true/false
+        stderr_logfile: path
+        stdout_logfile: path
+        stop_signal: 1, 3, 5, 9 etc
+        timeout: int(seconds)
+        restarts: int
+        expected_exit: [int, int]
+        startuptimeout: int
+        env_vars: [str, str]
+        working_dir: path
+        umask: octal, eg. 022
+```
+
 ## Commands
 | CMD | ACTION |
 |---------|---------|
@@ -42,6 +61,7 @@ taskmasterctl
 - [ ] logs to /var/log/
 - [ ] Implement config file options
 - [ ] Print response as is in ctl and send line by line
+- [ ] ENVVARS IN CONFIG
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))

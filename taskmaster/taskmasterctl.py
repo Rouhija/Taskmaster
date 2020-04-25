@@ -3,32 +3,23 @@
 """taskmasterctl -- control applications run by taskmasterd from the cmd line.
 Usage: %s [options] [action [arguments]]
 Options:
--
--
--
+  -h, --help   show this help message and exit
+  -d, --debug  log to console
 """
 
 import sys
 import socket
 import signal
 import logging
+import argparse
 from taskmaster.editor import Editor
 from taskmaster.config import Config
-from taskmaster.utils import parser
 from os.path import dirname, realpath
-
-parent_dir = dirname(dirname(realpath(__file__)))
-
-logging.basicConfig(
-    filename=f'{parent_dir}/logs/taskmasterctl.log',
-    level=logging.DEBUG,
-    format='%(levelname)s:%(asctime)s ⁠— %(message)s',
-    datefmt='%d/%m/%Y %H:%M:%S'
-)
+from taskmaster.utils import parse, syntax
 
 LOG = logging.getLogger(__name__)
 
-snake = """\
+SNEK = """\
     --..,_                     _,.--.
        `'.'.                .'`__ o  `;__.
           '.'.            .'.'`  '---'`  `
@@ -40,10 +31,9 @@ snake = """\
 
 class Console:
 
-    def __init__(self, stdin=None, stdout=None):
+    def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_address = ('localhost', 10000)
-        self.prompt = '> '
         self.buf = 256
 
 
@@ -58,15 +48,20 @@ class Console:
 
 
     def run_forever(self):
+        self.set_signals()
         e = Editor()
         while 1:
             command = e.read_in()
-            if command == None or command == 'quit' or command == 'exit' : break
-            elif command == '' : pass
-            elif parser(command):
-                response = self.send_to_daemon(command.lower())
+            command = parse(command)
+            if command == None or command == 'quit' or command == 'exit':
+                break
+            elif command == '':
+                pass
+            elif syntax(command) == True:
+                response = self.send_to_daemon(command)
                 if response is None or response == 'error':
-                    LOG.warn('No response from daemon')
+                    print(f'No response. Make sure taskmasterd is running.')
+                    LOG.warn(f'No response from {self.server_address}')
                 else:
                     self.echo_resp(response)
         self.cleanup()
@@ -114,10 +109,34 @@ class Console:
             sys.exit()
 
 
+def logger_options(debug: int):
+    if debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )
+    else:
+        parent_dir = dirname(dirname(realpath(__file__)))
+        logging.basicConfig(
+            filename=f'{parent_dir}/logs/taskmasterctl.log',
+            level=logging.DEBUG,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )
+
+
+def arg_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--debug", help="log to console", action="store_true")
+    return parser.parse_args()
+
+
 def main():
-    print(snake)
+    print(SNEK)
+    args = arg_parser()
+    logger_options(args.debug)
     c = Console()
-    c.set_signals()
     c.run_forever()
 
 

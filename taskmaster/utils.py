@@ -2,7 +2,7 @@ import pkg_resources
 
 VERSION = pkg_resources.require("taskmaster")[0].version
 
-DEFAULT_CMDS = [
+COMMANDS = [
     # 'clear',
     'exit',
     'quit',
@@ -20,7 +20,7 @@ DEFAULT_CMDS = [
     'version'
 ]
 
-ARG_CMDS = [
+NEEDS_ARG = [
     # 'clear',
     'exit',
     'reload',
@@ -36,15 +36,22 @@ def print_help(command):
         print(f'usage: {command} <name> | all')
 
 
-def parser(s):
+def syntax(s):
     split = s.split(' ')
-    if not split[0] in DEFAULT_CMDS:
-        print(f'Command not found: {split[0]}')
+    if not split[0] in COMMANDS:
+        print(f'command not found: {split[0]}')
         return False
     elif split[0] == 'version':
         print(VERSION)
         return False
-    elif len(split) == 1 and split[0] in ARG_CMDS:
+    elif len(split) == 1 and split[0] in NEEDS_ARG:
         print_help(split[0])
         return False
     return True
+
+
+def parse(command: str):
+    try:
+        return command.strip().lower()
+    except:
+        return None
