@@ -13,7 +13,7 @@ OPTIONS = [
     'stderr_logfile',
     'stop_signal',
     'kill_timeout',
-    'startup_timeout',
+    'startup_wait',
     'restarts',
     'expected_exit',
     'environment',
@@ -51,16 +51,15 @@ class Config(object):
         add default values if not defined and validate options
         """
         for proc_name, _ in self.conf['programs'].items():
-            if not 'command' in self.conf['programs'][proc_name]:
-                print(f'Missing required option in [{proc_name}]: command')
-                sys.exit()
+
+            self.opt_command(proc_name)
             self.opt_bool(proc_name, 'autostart', True, ['true', 'false'])
             self.opt_bool(proc_name, 'autorestart', True, ['true', 'false'])
             self.opt_int(proc_name, 'restarts', 3, int)
-            self.opt_int(proc_name, 'kill_timeout', 5, int)
-            self.opt_int(proc_name, 'startup_timeout', 5, int)
-            self.opt_logfile(proc_name, 'stdout_logfile', sys.stdout, ['full path to logfile'])
-            self.opt_logfile(proc_name, 'stderr_logfile', sys.stdout, ['full path to logfile'])
+            self.opt_int(proc_name, 'kill_timeout', 3, int)
+            self.opt_int(proc_name, 'startup_wait', 0.1, int)
+            self.opt_logfile(proc_name, 'stdout_logfile', '/dev/null', ['full path to logfile'])
+            self.opt_logfile(proc_name, 'stderr_logfile', '/dev/null', ['full path to logfile'])
             self.opt_signal(proc_name, 'stop_signal', signal.SIGTERM, 'one of [2, 3, 9, 15]')
             self.opt_list(proc_name, 'expected_exit', [0], 'list[int, int, ...]')
             self.opt_dir(proc_name, 'dir', None, ['valid path'])
@@ -73,14 +72,26 @@ class Config(object):
         # import json
         # print(json.dumps(self.conf, indent=4))
 
+    # Validate command option
+    def opt_command(self, proc_name):
+        if not 'command' in self.conf['programs'][proc_name]:
+            print(f'Missing required option in [{proc_name}]: command')
+            sys.exit()
+        try:
+            self.conf['programs'][proc_name]['command'] = list(self.conf['programs'][proc_name]['command'])
+        except:
+            print(f'Option command in [{proc_name}] needs type list')
+            sys.exit()
 
     # Validate and set default option for bool types
     def opt_bool(self, name, option, default, needs):
         if option in self.conf['programs'][name]:
             if self.conf['programs'][name][option] not in needs:
                 self.invalid_value(name, option, needs)
-            else:
-               self.conf['programs'][name][option] = bool(self.conf['programs'][name][option])
+            elif self.conf['programs'][name][option].lower() == 'true':
+               self.conf['programs'][name][option] = True
+            elif self.conf['programs'][name][option].lower() == 'false':
+               self.conf['programs'][name][option] = False
         else:
             self.conf['programs'][name][option] = default
 

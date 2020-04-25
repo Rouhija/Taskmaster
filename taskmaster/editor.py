@@ -3,7 +3,7 @@ import sys
 import tty
 import termios
 from taskmaster.hist import History
-from taskmaster.utils import DEFAULT_CMDS
+from taskmaster.utils import COMMANDS
 
 class _Getch:
 
@@ -63,7 +63,7 @@ class Editor:
 
     def complete(self, stdin, key):
         if len(stdin) > 0:
-            for c in DEFAULT_CMDS:
+            for c in COMMANDS:
                 if c.startswith(stdin):
                     stdin = c
                     break

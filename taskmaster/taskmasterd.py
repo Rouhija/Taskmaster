@@ -19,10 +19,13 @@ import argparse
 from subprocess import Popen
 from taskmaster.config import Config
 from os.path import dirname, realpath
-from time import gmtime, strftime, time
+from time import gmtime, strftime, time, sleep
 
 
 LOG = logging.getLogger(__name__)
+
+RUNNING = 'RUNNING'
+STOPPED = 'STOPPED'
 
 
 class Taskmasterd:
@@ -30,11 +33,10 @@ class Taskmasterd:
     def __init__(self, conf):
         self.conf = conf
         self.conf_backup = conf
-        self.processes = {}
-        self.directory = "/"
-        self.programs = conf['programs'] # pois
+        self.programs = conf['programs']
         self.buf = 256
         self.umask = 0o22
+        self.directory = "/"
         self.server_address = ('localhost', 10000)
         self.client_address = None
         self.connection = None
@@ -52,10 +54,10 @@ class Taskmasterd:
 
     def cleanup(self):
         try:
-            for proc_info in self.processes:
-                LOG.debug(f'killing pid {proc_info["pid"]}')
-                proc_info['p'].kill()
-                proc_info['p'].wait()
+            for p in self.programs:
+                LOG.debug(f'killing pid {p["pid"]}')
+                p['p'].kill()
+                p['p'].wait()
             self.connection.sendall('taskmasterd shut down successfully'.encode())
             self.connection.close()
         finally:
@@ -72,64 +74,85 @@ class Taskmasterd:
     def start_server(self):
         self.listen_sockets()
         self.set_signals()
-        # self.serve_forever()
-
-            #       'p': None,
-            # 'pid': None,
-            # 'name': None,
-            # 'state': None,
-            # 'start': None,
+        self.init_programs()
+        self.serve_forever()
 
 
-    # def init_program(self, prog):
-    #     proc_info = {}
-    #     conf = self.programs[prog]
-    #     log_stdout = open(conf['stdout_logfile'], 'w+')
-    #     log_stderr = open(conf['stderr_logfile'], 'w+')
-    #     if conf['autostart'] == 'true':
-    #         p = Popen(
-    #             [conf['command']],
-    #             stdout=log_stdout,
-    #             stderr=log_stderr
-    #         )
-    #         proc_info['p'] = p
-    #         proc_info['state'] = 'RUNNING'
-    #         proc_info['start'] = time()
-    #     else:
-    #         proc_info['p'] = None
-    #         proc_info['state'] = 'STOPPED'
-    #         proc_info['start'] = None
-    #     proc_info['name'] = prog
-    #     proc_info['pid'] = p.pid
-    #     self.processes.append(proc_info)
+    def init_programs(self):
+        for name, v in self.programs.items():
+            if v['autostart']:
+                self.prog_start(name)
+            else:
+               self.programs[name]['p'] = None
+               self.programs[name]['pid'] = None
+               self.programs[name]['state'] = STOPPED
+               self.programs[name]['start_ts'] = None 
 
 
-    # def serve_forever(self):
-    #     while 1:
-    #         LOG.debug('waiting for a connection')
-    #         self.connection, self.client_address = self.sock.accept()
-    #         try:
-    #             LOG.debug(f'connection from {self.client_address}')
-    #             # Receive data from control program
-    #             while True:
-    #                 data = self.connection.recv(16)
-    #                 LOG.debug(f'received "{data}"')
-    #                 if data:
-    #                     data = data.decode()
-    #                     if data == 'shutdown':
-    #                         self.cleanup()
-    #                     response = self.action(data)
-    #                     LOG.debug(f'sending response [{response}] back to the client')
-    #                     if response:
-    #                         self.connection.sendall(response.encode())
-    #                     else:
-    #                         self.connection.sendall(f'no actions for `{data}`'.encode())
-    #                 else:
-    #                     break
-    #         except OSError as e:
-    #             LOG.error(e)
-    #         finally:
-    #             LOG.debug(f'All data received from {self.client_address}')
+    def prog_start(self, name):
+
+        restarts = self.programs[name]['restarts']
+        startup_wait = self.programs[name]['startup_wait']
+        log_stdout = self.programs[name]['stdout_logfile']
+        log_stderr = self.programs[name]['stderr_logfile']
+
+        if isinstance(log_stdout, str):
+            stdout = open(log_stdout, 'w+')
+        if isinstance(log_stderr, str):
+            stderr = open(log_stderr, 'w+')
+
+        while 1:
+            p = Popen(
+                self.programs[name]['command'],
+                stdout=stdout,
+                stderr=stderr
+            )
+            sleep(startup_wait)
+            if p.poll() == None:
+                self.programs[name]['p'] = p
+                self.programs[name]['state'] = RUNNING
+                self.programs[name]['start_ts'] = time()
+                self.programs[name]['pid'] = p.pid
+                break
+            elif restarts:
+                sleep(0.1)
+                restarts -= 1
+            else:
+                LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
+                self.programs[name]['p'] = None
+                self.programs[name]['pid'] = None
+                self.programs[name]['state'] = STOPPED
+                self.programs[name]['start_ts'] = None
+                break
+
+
+    def serve_forever(self):
+        while 1:
+            LOG.debug('waiting for a connection')
+            self.connection, self.client_address = self.sock.accept()
+            try:
+                LOG.debug(f'connection from {self.client_address}')
+                # Receive data from control program
+                while True:
+                    data = self.connection.recv(16)
+                    LOG.debug(f'received "{data}"')
+                    if data:
+                        data = data.decode()
+                        if data == 'shutdown':
+                            self.cleanup()
+                        # response = self.action(data)
+                        response = self.prog_status(data)
+                        LOG.debug(f'sending response [{response}] back to the client')
+                        if response:
+                            self.connection.sendall(response.encode())
+                        else:
+                            self.connection.sendall(f'no actions for `{data}`'.encode())
+                    else:
+                        break
+            except OSError as e:
+                LOG.error(e)
+            finally:
+                LOG.debug(f'All data received from {self.client_address}')
 
 
     # def action(self, command):
@@ -140,17 +163,21 @@ class Taskmasterd:
     #         return None
 
 
-    # def prog_status(self, command):
-    #     status = ''
-    #     for proc_info in self.processes:
-    #         status += '{:{width}}'.format(proc_info['name'], width=25)
-    #         if proc_info['p'].poll() is None:
-    #             status += '{:{width}}'.format(proc_info['state'], width=10)
-    #         else:
-    #             status += '{:{width}}'.format('STOPPED', width=10)
-    #         status += 'pid {}, '.format(proc_info['pid'], width=10)
-    #         status += 'uptime {:{width}} |'.format(strftime('%H:%M:%S', gmtime(time() - proc_info['start'])), width=10)
-    #     return status
+    def prog_status(self, command):
+        status = ''
+        for k, v in self.programs.items():
+            status += '{:{width}}'.format(k, width=25)
+            status += '{:{width}}'.format(v['state'], width=10)
+            if v['pid']:
+                pid = 'pid {}, '.format(v['pid'])
+            else:
+                pid = 'pid {}, '.format('None')
+            status += '{:{width}}'.format(pid, width=11)    
+            if v['start_ts']:
+                status += 'uptime {:{width}} |'.format(strftime('%H:%M:%S', gmtime(time() - v['start_ts'])), width=10)
+            else:
+                status += 'uptime {:{width}} |'.format('--:--:--', width=10)
+        return status
 
 
     # def prog_start(self, command):
@@ -206,22 +233,22 @@ class Taskmasterd:
 
     def daemonize(self):
         """
-        This function daemonizes the program.
+        This function daemonizes the program like Supervisor
             1. We need to fork the parent process to ensure it's not the process leader
-            2. Change directory to /
+            2. Change working directory to /
             3. Close stdin, stdout, stderr
-            4. setsid() makes the process a process leader
+            4. setsid() makes the process a process leader in the new group
             5. set default umask to 022
         """
         pid = os.fork()
         if pid != 0:
             LOG.debug("taskmasterd forked; parent exiting")
             os._exit(0)
-        LOG.debug("daemonizing the taskmasterd process")
+        LOG.info("daemonizing the taskmasterd process")
         try:
             os.chdir(self.directory)
         except OSError as err:
-            LOG.error("can't chdir into %r: %s" % (self.directory, err))
+            LOG.critical("can't chdir into %r: %s" % (self.directory, err))
         else:
             LOG.debug("set current directory: %r" % self.directory)
         os.close(0)
