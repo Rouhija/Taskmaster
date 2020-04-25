@@ -16,7 +16,7 @@ import signal
 import socket
 import logging
 import argparse
-from subprocess import Popen
+from subprocess import Popen, TimeoutExpired
 from taskmaster.config import Config
 from os.path import dirname, realpath
 from time import gmtime, strftime, time, sleep
@@ -54,15 +54,26 @@ class Taskmasterd:
 
     def cleanup(self):
         try:
-            for p in self.programs:
-                LOG.debug(f'killing pid {p["pid"]}')
-                p['p'].kill()
-                p['p'].wait()
+            self.prog_stop(['all'])
             self.connection.sendall('taskmasterd shut down successfully'.encode())
             self.connection.close()
         finally:
             LOG.debug('taskmasterd shut down')
             sys.exit()
+
+
+    def init_programs(self):
+        startup = []
+        for name, v in self.programs.items():
+            if v['autostart']:
+                startup.append(name)
+            else:
+               self.programs[name]['p'] = None
+               self.programs[name]['pid'] = None
+               self.programs[name]['state'] = STOPPED
+               self.programs[name]['start_ts'] = None
+        if len(startup):
+            self.prog_start(startup)
 
 
     def listen_sockets(self):
@@ -78,54 +89,6 @@ class Taskmasterd:
         self.serve_forever()
 
 
-    def init_programs(self):
-        for name, v in self.programs.items():
-            if v['autostart']:
-                self.prog_start(name)
-            else:
-               self.programs[name]['p'] = None
-               self.programs[name]['pid'] = None
-               self.programs[name]['state'] = STOPPED
-               self.programs[name]['start_ts'] = None 
-
-
-    def prog_start(self, name):
-
-        restarts = self.programs[name]['restarts']
-        startup_wait = self.programs[name]['startup_wait']
-        log_stdout = self.programs[name]['stdout_logfile']
-        log_stderr = self.programs[name]['stderr_logfile']
-
-        if isinstance(log_stdout, str):
-            stdout = open(log_stdout, 'w+')
-        if isinstance(log_stderr, str):
-            stderr = open(log_stderr, 'w+')
-
-        while 1:
-            p = Popen(
-                self.programs[name]['command'],
-                stdout=stdout,
-                stderr=stderr
-            )
-            sleep(startup_wait)
-            if p.poll() == None:
-                self.programs[name]['p'] = p
-                self.programs[name]['state'] = RUNNING
-                self.programs[name]['start_ts'] = time()
-                self.programs[name]['pid'] = p.pid
-                break
-            elif restarts:
-                sleep(0.1)
-                restarts -= 1
-            else:
-                LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
-                self.programs[name]['p'] = None
-                self.programs[name]['pid'] = None
-                self.programs[name]['state'] = STOPPED
-                self.programs[name]['start_ts'] = None
-                break
-
-
     def serve_forever(self):
         while 1:
             LOG.debug('waiting for a connection')
@@ -134,14 +97,13 @@ class Taskmasterd:
                 LOG.debug(f'connection from {self.client_address}')
                 # Receive data from control program
                 while True:
-                    data = self.connection.recv(16)
+                    data = self.connection.recv(self.buf)
                     LOG.debug(f'received "{data}"')
                     if data:
                         data = data.decode()
                         if data == 'shutdown':
                             self.cleanup()
-                        # response = self.action(data)
-                        response = self.prog_status(data)
+                        response = self.action(data)
                         LOG.debug(f'sending response [{response}] back to the client')
                         if response:
                             self.connection.sendall(response.encode())
@@ -155,15 +117,101 @@ class Taskmasterd:
                 LOG.debug(f'All data received from {self.client_address}')
 
 
-    # def action(self, command):
-    #     command = command.split(' ')
-    #     try:
-    #         return self.fmap[command[0]](self, command)
-    #     except:
-    #         return None
+    def action(self, command):
+        command = command.split(' ')
+        try:
+            if command[0] == 'status':
+                return self.prog_status()
+            elif command[0] == 'start':
+                return self.prog_start(command[1:])
+            elif command[0] == 'stop':
+                return self.prog_stop(command[1:])
+        except Exception as e:
+            LOG.error(e)
+            return None
 
 
-    def prog_status(self, command):
+    def prog_start(self, command):
+        response = ''
+        if command[0] == 'all':
+            command = []
+            for k, _ in self.programs.items():
+                command.append(k)
+        for name in command:
+            try:
+                if self.programs[name]['p'].poll() == None:
+                    response += f'{name} is already running|'
+            except:
+                restarts = self.programs[name]['restarts']
+                startup_wait = self.programs[name]['startup_wait']
+                log_stdout = self.programs[name]['stdout_logfile']
+                log_stderr = self.programs[name]['stderr_logfile']
+
+                if isinstance(log_stdout, str):
+                    stdout = open(log_stdout, 'w+')
+                if isinstance(log_stderr, str):
+                    stderr = open(log_stderr, 'w+')
+
+                while 1:
+                    p = Popen(
+                        self.programs[name]['command'],
+                        stdout=stdout,
+                        stderr=stderr
+                    )
+                    sleep(startup_wait)
+                    if p.poll() == None:
+                        self.programs[name]['p'] = p
+                        self.programs[name]['state'] = RUNNING
+                        self.programs[name]['start_ts'] = time()
+                        self.programs[name]['pid'] = p.pid
+                        LOG.info(f'{name} started successfully with pid {p.pid}')
+                        response += f'{name} started successfully|'
+                        break
+                    elif restarts:
+                        sleep(0.1)
+                        restarts -= 1
+                    else:
+                        LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
+                        self.programs[name]['p'] = None
+                        self.programs[name]['pid'] = None
+                        self.programs[name]['state'] = STOPPED
+                        self.programs[name]['start_ts'] = None
+                        break
+        return response
+
+
+    def prog_stop(self, command):
+        response = ''
+        if command[0] == 'all':
+            command = []
+            for k, _ in self.programs.items():
+                command.append(k)
+        for name in command:
+            if self.programs[name]['p'] is not None:
+                kill_signal = self.programs[name]['stop_signal']
+                kill_timeout = self.programs[name]['kill_timeout']
+
+                LOG.info(f'Stopping process {self.programs[name]["pid"]}')
+                self.programs[name]['p'].send_signal(kill_signal)
+                try:
+                    self.programs[name]['p'].wait(timeout=kill_timeout)
+                    LOG.info(f'stopped pid {self.programs[name]["pid"]} successfully')
+                    response += f'stopped pid {self.programs[name]["pid"]} successfully|'
+                except TimeoutExpired:
+                    self.programs[name]['p'].kill()
+                    LOG.warn(f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)')
+                    response += f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)|'
+                finally:
+                    self.programs[name]['p'] = None
+                    self.programs[name]['state'] = STOPPED
+                    self.programs[name]['start_ts'] = None
+                    self.programs[name]['pid'] = None
+            else:
+                response += f'{name} is already stopped|'
+        return response
+
+
+    def prog_status(self):
         status = ''
         for k, v in self.programs.items():
             status += '{:{width}}'.format(k, width=25)
@@ -178,38 +226,6 @@ class Taskmasterd:
             else:
                 status += 'uptime {:{width}} |'.format('--:--:--', width=10)
         return status
-
-
-    # def prog_start(self, command):
-    #     resp = ''
-    #     command.pop(0)
-    #     for name in command:
-    #         for i, proc in enumerate(self.processes):
-    #             if proc['name'] == name or name == 'all':
-    #                 if proc['state'] == 'STOPPED':
-    #                     LOG.info(f'Starting process {proc["pid"]}')
-    #                     proc['p'].send_signal(signal.SIGCONT)
-    #                     resp += f'{proc["name"]} started|'
-    #                     self.processes[i]['state'] = 'RUNNING'
-    #                 else:
-    #                     resp += f'{proc["name"]} is already running|'
-    #     return resp        
-
-    
-    # def prog_stop(self, command):
-    #     resp = ''
-    #     command.pop(0)
-    #     for name in command:
-    #         for i, proc in enumerate(self.processes):
-    #             if proc['name'] == name or name == 'all':
-    #                 if proc['state'] == 'RUNNING':
-    #                     LOG.info(f'Stopping process {proc["pid"]}')
-    #                     proc['p'].send_signal(signal.SIGSTOP)
-    #                     resp += f'{proc["name"]} stopped|'
-    #                     self.processes[i]['state'] = 'STOPPED'
-    #                 else:
-    #                     resp += f'{proc["name"]} is already stopped|'
-    #     return resp
 
 
     # def prog_restart(self, command):
@@ -259,14 +275,6 @@ class Taskmasterd:
         self.stderr = sys.stderr = sys.__stderr__ = open("/dev/null", "w")
         os.setsid()
         os.umask(self.umask)
-
-    # fmap = {
-    #     'status': prog_status,
-    #     'start': prog_start,
-    #     'stop': prog_stop,
-    #     'reread': reread_conf,
-    #     'restart': prog_restart
-    # }
 
 
 def logger_options(nodaemon):
