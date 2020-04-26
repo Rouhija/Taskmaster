@@ -16,10 +16,11 @@ import signal
 import socket
 import logging
 import argparse
-from subprocess import Popen, TimeoutExpired
-from taskmaster.config import Config
+from copy import deepcopy
 from os.path import dirname, realpath
+from subprocess import Popen, TimeoutExpired
 from time import gmtime, strftime, time, sleep
+from taskmaster.config import Config, ConfigError
 
 
 LOG = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class Taskmasterd:
     def __init__(self, conf):
         self.conf = conf
         self.conf_backup = conf
-        self.programs = conf['programs']
+        self.programs = deepcopy(conf['programs'])
         self.buf = 256
         self.umask = 0o22
         self.directory = "/"
@@ -54,7 +55,7 @@ class Taskmasterd:
 
     def cleanup(self):
         try:
-            self.prog_stop(['all'])
+            self.stop_programs(['all'])
             self.connection.sendall('taskmasterd shut down successfully'.encode())
             self.connection.close()
         finally:
@@ -64,7 +65,7 @@ class Taskmasterd:
 
     def init_programs(self):
         startup = []
-        for name, v in self.programs.items():
+        for name, v in self.conf['programs'].items():
             if v['autostart']:
                 startup.append(name)
             else:
@@ -73,7 +74,7 @@ class Taskmasterd:
                self.programs[name]['state'] = STOPPED
                self.programs[name]['start_ts'] = None
         if len(startup):
-            self.prog_start(startup)
+            self.start_programs(startup)
 
 
     def listen_sockets(self):
@@ -121,97 +122,124 @@ class Taskmasterd:
         command = command.split(' ')
         try:
             if command[0] == 'status':
-                return self.prog_status()
+                return self.get_status()
             elif command[0] == 'start':
-                return self.prog_start(command[1:])
+                return self.start_programs(command[1:])
             elif command[0] == 'stop':
-                return self.prog_stop(command[1:])
+                return self.stop_programs(command[1:])
+            elif command[0] == 'restart':
+                return self.restart_programs(command[1:])
+            elif command[0] == 'reread':
+                return self.reread()
+            elif command[0] == 'update':
+                return self.update()
         except Exception as e:
             LOG.error(e)
             return None
 
 
-    def prog_start(self, command):
+    def start_programs(self, command):
         response = ''
         if command[0] == 'all':
             command = []
             for k, _ in self.programs.items():
                 command.append(k)
         for name in command:
-            try:
-                if self.programs[name]['p'].poll() == None:
-                    response += f'{name} is already running|'
-            except:
-                restarts = self.programs[name]['restarts']
-                startup_wait = self.programs[name]['startup_wait']
-                log_stdout = self.programs[name]['stdout_logfile']
-                log_stderr = self.programs[name]['stderr_logfile']
-
-                if isinstance(log_stdout, str):
-                    stdout = open(log_stdout, 'w+')
-                if isinstance(log_stderr, str):
-                    stderr = open(log_stderr, 'w+')
-
-                while 1:
-                    p = Popen(
-                        self.programs[name]['command'],
-                        stdout=stdout,
-                        stderr=stderr
-                    )
-                    sleep(startup_wait)
-                    if p.poll() == None:
-                        self.programs[name]['p'] = p
-                        self.programs[name]['state'] = RUNNING
-                        self.programs[name]['start_ts'] = time()
-                        self.programs[name]['pid'] = p.pid
-                        LOG.info(f'{name} started successfully with pid {p.pid}')
-                        response += f'{name} started successfully|'
-                        break
-                    elif restarts:
-                        sleep(0.1)
-                        restarts -= 1
-                    else:
-                        LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
-                        self.programs[name]['p'] = None
-                        self.programs[name]['pid'] = None
-                        self.programs[name]['state'] = STOPPED
-                        self.programs[name]['start_ts'] = None
-                        break
+            response += self.start(name)
         return response
 
 
-    def prog_stop(self, command):
-        response = ''
-        if command[0] == 'all':
-            command = []
-            for k, _ in self.programs.items():
-                command.append(k)
-        for name in command:
-            if self.programs[name]['p'] is not None:
-                kill_signal = self.programs[name]['stop_signal']
-                kill_timeout = self.programs[name]['kill_timeout']
+    def start(self, name):
+        try:
+            if self.programs[name]['p'].poll() == None:
+                response = f'{name} is already running|'
+        except:
+            restarts = self.programs[name]['restarts']
+            startup_wait = self.programs[name]['startup_wait']
+            log_stdout = self.programs[name]['stdout_logfile']
+            log_stderr = self.programs[name]['stderr_logfile']
 
-                LOG.info(f'Stopping process {self.programs[name]["pid"]}')
-                self.programs[name]['p'].send_signal(kill_signal)
-                try:
-                    self.programs[name]['p'].wait(timeout=kill_timeout)
-                    LOG.info(f'stopped pid {self.programs[name]["pid"]} successfully')
-                    response += f'stopped pid {self.programs[name]["pid"]} successfully|'
-                except TimeoutExpired:
-                    self.programs[name]['p'].kill()
-                    LOG.warn(f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)')
-                    response += f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)|'
-                finally:
+            if isinstance(log_stdout, str):
+                stdout = open(log_stdout, 'w+')
+            if isinstance(log_stderr, str):
+                stderr = open(log_stderr, 'w+')
+
+            while 1:
+                p = Popen(
+                    self.programs[name]['command'],
+                    stdout=stdout,
+                    stderr=stderr
+                )
+                sleep(startup_wait)
+                if p.poll() == None:
+                    self.programs[name]['p'] = p
+                    self.programs[name]['state'] = RUNNING
+                    self.programs[name]['start_ts'] = time()
+                    self.programs[name]['pid'] = p.pid
+                    LOG.info(f'{name} started successfully with pid {p.pid}')
+                    response = f'{name} started successfully|'
+                    break
+                elif restarts:
+                    sleep(0.1)
+                    restarts -= 1
+                else:
+                    LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
+                    response = f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries'
                     self.programs[name]['p'] = None
+                    self.programs[name]['pid'] = None
                     self.programs[name]['state'] = STOPPED
                     self.programs[name]['start_ts'] = None
-                    self.programs[name]['pid'] = None
-            else:
-                response += f'{name} is already stopped|'
+                    break
         return response
 
 
-    def prog_status(self):
+    def stop_programs(self, command):
+        response = ''
+        if command[0] == 'all':
+            command = []
+            for k, _ in self.programs.items():
+                command.append(k)
+        for name in command:
+            response += self.stop(name)
+        return response
+
+
+    def stop(self, name):
+        if self.programs[name]['p'] is not None:
+            kill_signal = self.programs[name]['stop_signal']
+            kill_timeout = self.programs[name]['kill_timeout']
+
+            LOG.info(f'Stopping process {self.programs[name]["pid"]}')
+            self.programs[name]['p'].send_signal(kill_signal)
+            try:
+                self.programs[name]['p'].wait(timeout=kill_timeout)
+                LOG.info(f'stopped pid {self.programs[name]["pid"]} successfully')
+                response = f'stopped {name} successfully|'
+            except TimeoutExpired:
+                self.programs[name]['p'].kill()
+                LOG.warn(f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)')
+                response = f'Killed {name} after timeout ({kill_timeout} seconds)|'
+            finally:
+                self.programs[name]['p'] = None
+                self.programs[name]['state'] = STOPPED
+                self.programs[name]['start_ts'] = None
+                self.programs[name]['pid'] = None
+        else:
+            response = f'{name} is already stopped|'
+        return response
+
+
+    def restart_programs(self, command):
+        response = ''
+        LOG.info(f'Restarting programs {command}')
+        for name in command:
+            self.stop(name)
+            response += self.start(name)
+            response = response.replace('started', 'restarted')
+        return response
+
+
+    def get_status(self):
         status = ''
         for k, v in self.programs.items():
             status += '{:{width}}'.format(k, width=25)
@@ -228,23 +256,52 @@ class Taskmasterd:
         return status
 
 
-    # def prog_restart(self, command):
-    #     # LOG.info(f'Restarting programs {command[1:]}')
-    #     # resp = self.prog_stop(command)
-    #     # resp = self.prog_start(command)
-    #     # resp = resp.replace('stopped', 'restarted')
-    #     return 'error'
+    def reread(self):
+        response = None
+        try:
+            config = Config()
+            self.conf = config.conf
+            response = 'Configuration file reread successfully - run `update` to apply changes'
+        except ConfigError as e:
+            self.conf = self.conf_backup
+            response = f"Couldn't read configuration:|-->\t{e}"
+        finally:
+            return response
 
 
-    # def reread_conf(self, command):
-    #     config = Config()
-    #     self.conf = config.conf
-    #     return 'Configuration file reread successfully - run update to apply changes'
-
-
-    # def reload(self, command):
-    #     # os.execv(__file__, sys.argv)
-    #     return 'error'
+    def update(self):
+        try:
+            for k, v in self.conf['programs'].items():
+                if not k in self.conf_backup['programs'] and v['autostart']:
+                    LOG.info(f'New program in configuration [{k}]: starting')
+                    self.programs[k] = deepcopy(v)
+                    self.start(k)
+                elif not k in self.conf_backup['programs'] and not v['autostart']:
+                    LOG.info(f'New program in configuration [{k}]: no autostart')
+                    self.programs[k] = deepcopy(v)
+                    self.programs[k]['p'] = None
+                    self.programs[k]['pid'] = None
+                    self.programs[k]['state'] = STOPPED
+                    self.programs[k]['start_ts'] = None
+                elif self.conf['programs'][k] != self.conf_backup['programs'][k] and v['autostart']:
+                    LOG.info(f'Configuration for [{k}] changed: restarting')
+                    self.stop(k)
+                    self.programs[k] = deepcopy(v)
+                    self.start(k)
+                elif self.conf['programs'][k] != self.conf_backup['programs'][k] and not v['autostart']:
+                    LOG.info(f'Configuration for [{k}] changed: no autostart')
+                    self.stop(k)
+                    self.programs[k] = deepcopy(v)
+            for k, _ in self.conf_backup['programs'].items():
+                if not k in self.conf['programs']:
+                    LOG.info(f'[{k}] removed: stopping')
+                    self.stop(k)
+                    del self.programs[k]
+        except Exception as e:
+            LOG.error(e)
+            return f'Error in update: {e}'
+        self.conf_backup = self.conf
+        return 'Update ran successfully'
 
 
     def daemonize(self):
@@ -277,6 +334,7 @@ class Taskmasterd:
         os.umask(self.umask)
 
 
+
 def logger_options(nodaemon):
     if nodaemon:
         logging.basicConfig(
@@ -292,6 +350,7 @@ def logger_options(nodaemon):
             format='%(levelname)s:%(asctime)s ⁠— %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
         )
+    return
 
 
 def arg_parser():
@@ -304,7 +363,10 @@ def arg_parser():
 def main():
     args = arg_parser()
     logger_options(args.nodaemon)
-    config = Config()
+    try:
+        config = Config()
+    except ConfigError as e:
+        sys.exit(f'ConfigError: {e}')
     d = Taskmasterd(config.conf)
     if not args.nodaemon:
         d.daemonize()

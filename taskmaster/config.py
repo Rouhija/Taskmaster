@@ -21,6 +21,15 @@ OPTIONS = [
     'umask'
 ]
 
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+class ConfigError(Error):
+
+    def __init__(self, message):
+        self.message = message
+
 
 class Config(object):
 
@@ -34,17 +43,17 @@ class Config(object):
         self.processes = {}
         parent_dir = dirname(dirname(realpath(__file__)))
 
-        if self.path is not None:
-            with open(path, 'r') as cfg_stream: 
-                self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
-        else:
-            with open(f'{parent_dir}/config.yml', 'r') as cfg_stream: 
-                self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
-
         try:
+            if self.path is not None:
+                with open(path, 'r') as cfg_stream: 
+                    self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
+            else:
+                with open(f'{parent_dir}/config.yml', 'r') as cfg_stream: 
+                    self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
+
             self.process()
-        except Exception as e:
-            print(e)
+        except (ConfigError, FileNotFoundError, PermissionError) as e:
+            raise ConfigError(e)
 
     def process(self):
         """
@@ -69,19 +78,15 @@ class Config(object):
                 if k not in OPTIONS:
                     self.invalid_option(proc_name, k)
 
-        # import json
-        # print(json.dumps(self.conf, indent=4))
 
     # Validate command option
     def opt_command(self, proc_name):
         if not 'command' in self.conf['programs'][proc_name]:
-            print(f'Missing required option in [{proc_name}]: command')
-            sys.exit()
+            raise ConfigError(f'Missing required option in [{proc_name}]: command')
         try:
             self.conf['programs'][proc_name]['command'] = list(self.conf['programs'][proc_name]['command'])
         except:
-            print(f'Option command in [{proc_name}] needs type list')
-            sys.exit()
+            raise ConfigError(f'Option command in [{proc_name}] needs type list')
 
     # Validate and set default option for bool types
     def opt_bool(self, name, option, default, needs):
@@ -114,7 +119,6 @@ class Config(object):
                 with open(self.conf['programs'][name][option], 'w+') as f:
                     pass
             except IOError as e:
-                print(e)
                 self.invalid_value(name, option, needs)    
         else:
             self.conf['programs'][name][option] = default
@@ -127,7 +131,6 @@ class Config(object):
             try:
                 os.chdir(self.conf['programs'][name][option])
             except IOError as e:
-                print(e)
                 self.invalid_value(name, option, needs)
             finally:
                 os.chdir(cwd)
@@ -164,15 +167,13 @@ class Config(object):
 
 
     def invalid_value(self, name, opt, needs):
-        print(f'Invalid value: program [{name}] in option [{opt}] - needs {needs}')
-        sys.exit()
+        raise ConfigError(f'Invalid value: program [{name}] in option [{opt}] - needs {needs}')
 
     def invalid_option(self, name, opt):
         for o in OPTIONS:
             if opt in o:
                 suggestion = o
-                print(f'Invalid option: program [{name}] in option [{opt}] - did you mean "{suggestion}"?')
+                raise ConfigError(f'Invalid option: program [{name}] in option [{opt}] - did you mean "{suggestion}"?')
                 break
         else:
-            print(f'Invalid option: program [{name}] in option [{opt}]')
-        sys.exit()
+            raise ConfigError(f'Invalid option: program [{name}] in option [{opt}]')

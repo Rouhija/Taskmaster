@@ -16,7 +16,7 @@ COMMANDS = [
     'status',
     'stop',
     # 'tail',
-    # 'update',
+    'update',
     'version'
 ]
 

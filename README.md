@@ -56,12 +56,12 @@ programs:
 ## Dependencies
 
 ### To-Do
-- [ ] Berrer parser and return curated command
 - [ ] Config file from cmd args
 - [ ] logs to /var/log/
-- [ ] Implement config file options
 - [ ] Print response as is in ctl and send line by line
 - [ ] ENVVARS IN CONFIG
+- [ ] DO update and restart
+- [ ] DO unittests
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))
