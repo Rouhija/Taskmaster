@@ -1,9 +1,10 @@
 # Taskmaster
-Job control program, much like [Supervisor](http://supervisord.org/)
+UNIX job control program, much like [Supervisor](http://supervisord.org/)
 
 ## Installation
 ```sh
 virtualenv venv -p python3 && source venv/bin/activate
+pip install -r requirements.txt
 python3 setup.py develop
 ```
 
@@ -22,19 +23,19 @@ taskmasterctl
 ## Config file options
 ```yaml
 programs:
-    script:
-        command: REQUIRED
+    program_name:
+        command: list[path, arg, ...] - REQUIRED
         autostart: true/false
         autorestart: true/false
         stderr_logfile: path
         stdout_logfile: path
         stop_signal: 1, 3, 5, 9 etc
-        timeout: int(seconds)
+        kill_timeout: int(seconds)
         restarts: int
-        expected_exit: [int, int]
-        startuptimeout: int
-        env_vars: [str, str]
-        working_dir: path
+        expected_exit: [int, int, ...]
+        startup_wait: int(seconds)
+        environment: [str=str, str=str, ...]
+        dir: path
         umask: octal, eg. 022
 ```
 
@@ -46,8 +47,7 @@ programs:
 | start <name> | Start program |
 | stop <name> | Stop program |
 | restart <name> | Restart program |
-| clear <name> | Clear program log files |
-| tail <name> <stdout/stderr> <n> | Read from program logs |
+| tail <name> <stdout/stderr> | Read last 10 entries from program logs |
 | reread | Reread configuration file |
 | update | Apply configuration file changes |
 | shutdown | Terminate taskmasterd |
@@ -56,11 +56,8 @@ programs:
 ## Dependencies
 
 ### To-Do
-- [ ] Config file from cmd args
 - [ ] logs to /var/log/
-- [ ] Print response as is in ctl and send line by line
 - [ ] ENVVARS IN CONFIG
-- [ ] DO update and restart
 - [ ] DO unittests
 
 ### References

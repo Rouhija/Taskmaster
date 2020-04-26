@@ -18,15 +18,16 @@ import logging
 import argparse
 from copy import deepcopy
 from os.path import dirname, realpath
-from subprocess import Popen, TimeoutExpired
 from time import gmtime, strftime, time, sleep
 from taskmaster.config import Config, ConfigError
+from subprocess import DEVNULL, PIPE, Popen, TimeoutExpired
 
 
 LOG = logging.getLogger(__name__)
 
 RUNNING = 'RUNNING'
 STOPPED = 'STOPPED'
+UNKNOWN = 'UNKNOWN'
 
 
 class Taskmasterd:
@@ -35,7 +36,7 @@ class Taskmasterd:
         self.conf = conf
         self.conf_backup = conf
         self.programs = deepcopy(conf['programs'])
-        self.buf = 256
+        self.buf = 4096
         self.umask = 0o22
         self.directory = "/"
         self.server_address = ('localhost', 10000)
@@ -109,7 +110,7 @@ class Taskmasterd:
                         if response:
                             self.connection.sendall(response.encode())
                         else:
-                            self.connection.sendall(f'no actions for `{data}`'.encode())
+                            self.connection.sendall(f'response: None'.encode())
                     else:
                         break
             except OSError as e:
@@ -129,6 +130,8 @@ class Taskmasterd:
                 return self.stop_programs(command[1:])
             elif command[0] == 'restart':
                 return self.restart_programs(command[1:])
+            elif command[0] == 'tail':
+                return self.tail(command[1], command[2])
             elif command[0] == 'reread':
                 return self.reread()
             elif command[0] == 'update':
@@ -161,8 +164,12 @@ class Taskmasterd:
 
             if isinstance(log_stdout, str):
                 stdout = open(log_stdout, 'w+')
+            else:
+                stdout = DEVNULL
             if isinstance(log_stderr, str):
                 stderr = open(log_stderr, 'w+')
+            else:
+                stderr = DEVNULL
 
             while 1:
                 p = Popen(
@@ -243,7 +250,10 @@ class Taskmasterd:
         status = ''
         for k, v in self.programs.items():
             status += '{:{width}}'.format(k, width=25)
-            status += '{:{width}}'.format(v['state'], width=10)
+            if 'state' in v:
+                status += '{:{width}}'.format(v['state'], width=10)
+            else:
+                status += '{:{width}}'.format(UNKNOWN, width=10)
             if v['pid']:
                 pid = 'pid {}, '.format(v['pid'])
             else:
@@ -292,6 +302,10 @@ class Taskmasterd:
                     LOG.info(f'Configuration for [{k}] changed: no autostart')
                     self.stop(k)
                     self.programs[k] = deepcopy(v)
+                    self.programs[k]['p'] = None
+                    self.programs[k]['pid'] = None
+                    self.programs[k]['state'] = STOPPED
+                    self.programs[k]['start_ts'] = None
             for k, _ in self.conf_backup['programs'].items():
                 if not k in self.conf['programs']:
                     LOG.info(f'[{k}] removed: stopping')
@@ -303,6 +317,27 @@ class Taskmasterd:
         self.conf_backup = self.conf
         return 'Update ran successfully'
 
+    
+    def tail(self, name, fd):
+        stream = f'{fd}_logfile'
+        logs = self.programs[name][stream]
+        if isinstance(logs, str):
+            p = Popen(
+                ['tail', logs],
+                stdout=PIPE,
+                stderr=PIPE
+            )
+            try:
+                out, err = p.communicate(timeout=5)
+            except TimeoutExpired:
+                return 'Error calling tail (timeout after 5 seconds)'
+            if len(out):
+                return out.decode()
+            elif len(err):
+                return err.decode()
+        else:
+            return f'No {fd} logfile specified for {name}: output is directed to /dev/null'
+
 
     def daemonize(self):
         """
@@ -311,7 +346,7 @@ class Taskmasterd:
             2. Change working directory to /
             3. Close stdin, stdout, stderr
             4. setsid() makes the process a process leader in the new group
-            5. set default umask to 022
+            5. set default umask
         """
         pid = os.fork()
         if pid != 0:
@@ -355,7 +390,7 @@ def logger_options(nodaemon):
 
 def arg_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file", action="store_true")
+    parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file")
     parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
     return parser.parse_args()
 
@@ -364,10 +399,11 @@ def main():
     args = arg_parser()
     logger_options(args.nodaemon)
     try:
-        config = Config()
+        config = Config(args.configuration)
     except ConfigError as e:
         sys.exit(f'ConfigError: {e}')
     d = Taskmasterd(config.conf)
+    print('Server started')
     if not args.nodaemon:
         d.daemonize()
     d.start_server()

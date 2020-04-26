@@ -39,21 +39,29 @@ class Config(object):
     """
 
     def __init__(self, path=None):
-        self.path = path
-        self.processes = {}
-        parent_dir = dirname(dirname(realpath(__file__)))
-
         try:
-            if self.path is not None:
+            if path is not None:
                 with open(path, 'r') as cfg_stream: 
                     self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
             else:
-                with open(f'{parent_dir}/config.yml', 'r') as cfg_stream: 
-                    self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
-
+                print('No config file specified, searching...')
+                self.search()
             self.process()
-        except (ConfigError, FileNotFoundError, PermissionError) as e:
+        except (ConfigError, FileNotFoundError, PermissionError, TypeError) as e:
             raise ConfigError(e)
+
+    def search(self):
+        search = ['config.yml', 'config.yaml', 'configuration.yml', 'test/config.yml']
+        parent_dir = dirname(dirname(realpath(__file__)))
+        for s in search:
+            try:
+                with open(f'{parent_dir}/{s}', 'r') as cfg_stream: 
+                    self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
+                    return
+            except:
+                pass
+        raise ConfigError("Couldn't find configuration file")
+
 
     def process(self):
         """
@@ -67,8 +75,8 @@ class Config(object):
             self.opt_int(proc_name, 'restarts', 3, int)
             self.opt_int(proc_name, 'kill_timeout', 3, int)
             self.opt_int(proc_name, 'startup_wait', 0.1, int)
-            self.opt_logfile(proc_name, 'stdout_logfile', '/dev/null', ['full path to logfile'])
-            self.opt_logfile(proc_name, 'stderr_logfile', '/dev/null', ['full path to logfile'])
+            self.opt_logfile(proc_name, 'stdout_logfile', None, ['full path to logfile'])
+            self.opt_logfile(proc_name, 'stderr_logfile', None, ['full path to logfile'])
             self.opt_signal(proc_name, 'stop_signal', signal.SIGTERM, 'one of [2, 3, 9, 15]')
             self.opt_list(proc_name, 'expected_exit', [0], 'list[int, int, ...]')
             self.opt_dir(proc_name, 'dir', None, ['valid path'])

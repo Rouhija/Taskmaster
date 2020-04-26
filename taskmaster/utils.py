@@ -3,37 +3,45 @@ import pkg_resources
 VERSION = pkg_resources.require("taskmaster")[0].version
 
 COMMANDS = [
-    # 'clear',
     'exit',
     'quit',
     'reload',
-    # 'remove',
     'reread',
     'restart',
     'shutdown',
-    # 'signal',
     'start',
     'status',
     'stop',
-    # 'tail',
+    'tail',
     'update',
     'version'
 ]
 
 NEEDS_ARG = [
-    # 'clear',
     'exit',
     'reload',
     'restart',
     'start',
     'stop',
-    # 'tail',
+    'tail'
 ]
 
 
 def print_help(command):
     if command == 'start' or command == 'stop':
         print(f'usage: {command} <name> | all')
+
+
+def syntax_tail(command):
+    try:
+        streams = ['stdout', 'stderr']
+        if len(command) != 3:
+            return False
+        elif command[2].lower() not in streams:
+            return False
+        return True
+    except:
+        return False
 
 
 def syntax(s):
@@ -47,6 +55,10 @@ def syntax(s):
     elif len(split) == 1 and split[0] in NEEDS_ARG:
         print_help(split[0])
         return False
+    elif split[0] == 'tail':
+        if not syntax_tail(split):
+            print(f'usage: tail <name> <stdout/stderr>')
+            return False
     return True
 
 

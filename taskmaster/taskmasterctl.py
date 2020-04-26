@@ -34,7 +34,8 @@ class Console:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_address = ('localhost', 10000)
-        self.buf = 256
+        self.buf = 16
+        self.sock.settimeout(0.5)
 
 
     def set_signals(self):
@@ -59,7 +60,7 @@ class Console:
                 pass
             elif syntax(command) == True:
                 response = self.send_to_daemon(command)
-                if response is None or response == 'error':
+                if response is None:
                     print(f'No response. Make sure taskmasterd is running.')
                     LOG.warn(f'No response from {self.server_address}')
                 else:
@@ -76,7 +77,7 @@ class Console:
 
     def send_to_daemon(self, command):
 
-        response = None
+        response = ''
 
         # Connect to daemon
         try:
@@ -94,12 +95,19 @@ class Console:
             except BrokenPipeError as e:
                 LOG.error(f'Daemon is not responding: {e}')
 
-            # Get response       
-            response = self.sock.recv(self.buf).decode()
+            # Get response
+            while 1:
+                r = self.sock.recv(self.buf)
+                if not r:
+                    break
+                response += r.decode()
             LOG.info('Received from taskmasterd "%s"' % response)
 
         finally:
-            return response
+            if len(response):
+                return response
+            else:
+                return None
 
     def cleanup(self):
         try:
