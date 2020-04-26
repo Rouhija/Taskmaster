@@ -26,7 +26,7 @@ programs:
     program_name:
         command: list[path, arg, ...] - REQUIRED
         autostart: true/false
-        autorestart: true/false
+        autorestart: ['always', 'never', 'unexpected_only']
         stderr_logfile: path
         stdout_logfile: path
         stop_signal: 1, 3, 5, 9 etc
@@ -60,7 +60,9 @@ programs:
 - [ ] ENVVARS IN CONFIG
 - [ ] DO unittests
 - [ ] Unexpected exit
-- [ ] Editor erase
+- [x] Queue from Server to monitor which controls?
+- [ ] Shutdown errors
+- [ ] Check start and stop logic
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))

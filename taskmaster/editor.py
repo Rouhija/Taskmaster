@@ -43,7 +43,7 @@ class Editor:
                 stdin += key.decode()
             self.clear()
             print(stdin, end="", flush=True)
-            print(f'  x: {self.x_pos}  in_len: {len(stdin) - self.correction} input: {stdin}', end="", flush=True)
+            # print(f'  x: {self.x_pos}  in_len: {len(stdin) - self.correction} input: {stdin}', end="", flush=True)
         self.x_pos = 0
         self.correction = 0
         self.hist.add(stdin)

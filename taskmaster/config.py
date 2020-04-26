@@ -71,7 +71,7 @@ class Config(object):
 
             self.opt_command(proc_name)
             self.opt_bool(proc_name, 'autostart', True, ['true', 'false'])
-            self.opt_bool(proc_name, 'autorestart', True, ['true', 'false'])
+            self.opt_autorestart(proc_name, 'autorestart', 'always', ['always', 'never', 'unexpected'])
             self.opt_int(proc_name, 'restarts', 3, int)
             self.opt_int(proc_name, 'kill_timeout', 3, int)
             self.opt_int(proc_name, 'startup_wait', 0.1, int)
@@ -86,6 +86,14 @@ class Config(object):
                 if k not in OPTIONS:
                     self.invalid_option(proc_name, k)
 
+
+    # Validate autorestart option
+    def opt_autorestart(self, name, option, default, needs):
+        if option in self.conf['programs'][name]:
+            if self.conf['programs'][name][option] not in needs:
+                self.invalid_value(name, option, needs)
+        else:
+            self.conf['programs'][name][option] = default
 
     # Validate command option
     def opt_command(self, proc_name):

@@ -17,6 +17,7 @@ import socket
 import logging
 import argparse
 from copy import deepcopy
+from multiprocessing import Process, Queue
 from os.path import dirname, realpath
 from time import gmtime, strftime, time, sleep
 from taskmaster.config import Config, ConfigError
@@ -28,6 +29,7 @@ LOG = logging.getLogger(__name__)
 RUNNING = 'RUNNING'
 STOPPED = 'STOPPED'
 UNKNOWN = 'UNKNOWN'
+SYSEXIT = 'SYSEXIT'
 
 
 class Taskmasterd:
@@ -56,6 +58,8 @@ class Taskmasterd:
 
     def cleanup(self):
         try:
+            self.monitor.join()
+            self.server.join()
             self.stop_programs(['all'])
             self.connection.sendall('taskmasterd shut down successfully'.encode())
             self.connection.close()
@@ -87,11 +91,45 @@ class Taskmasterd:
     def start_server(self):
         self.listen_sockets()
         self.set_signals()
+
+        self.queue = Queue()
+        self.monitor = Process(target=self.manager, args=(self.queue, ))
+        self.server = Process(target=self.server, args=(self.queue, ))
+        self.monitor.start()
+        self.server.start()
+        # self.server()
+
+
+    def manager(self, queue):
+        LOG.debug('starting manager')
         self.init_programs()
-        self.serve_forever()
+        while 1:
+            try:
+                # LOG.debug('manager: polling queue')
+                msg = queue.get(timeout=3)
+                response = self.action(msg)
+                if msg == 'shutdown':
+                    break
+                queue.put(response)
+            except Exception as e:
+                # LOG.debug('manager: queue empty, checking program status')
+                for k, v in self.programs.items():
+                    autorestart = self.programs[k]['autorestart'] 
+                    p = self.programs[k]['p']
+                    if p is not None:
+                        exit_code = p.poll()
+                        if exit_code is not None and self.programs[k]['state'] == RUNNING:
+                            self.programs[k]['state'] = SYSEXIT
+                            self.programs[k]['start_ts'] = None
+                            self.programs[k]['pid'] = None
+                            LOG.info(f'{k} exited with {exit_code}')
+                            if autorestart == 'unexpected':
+                                self.restart_programs([k])
 
 
-    def serve_forever(self):
+
+    def server(self, queue):
+        LOG.debug('starting server')
         while 1:
             LOG.debug('waiting for a connection')
             self.connection, self.client_address = self.sock.accept()
@@ -103,9 +141,12 @@ class Taskmasterd:
                     LOG.debug(f'received "{data}"')
                     if data:
                         data = data.decode()
-                        if data == 'shutdown':
-                            self.cleanup()
-                        response = self.action(data)
+                        queue.put(data)
+                        response = queue.get()
+                        # self.connection.sendall(data.encode())
+                        # if data == 'shutdown':
+                        #     sys.exit()
+                        # response = self.action(data)
                         LOG.debug(f'sending response [{response}] back to the client')
                         if response:
                             self.connection.sendall(response.encode())
@@ -136,6 +177,8 @@ class Taskmasterd:
                 return self.reread()
             elif command[0] == 'update':
                 return self.update()
+            elif command[0] == 'shutdown':
+                self.cleanup()
         except Exception as e:
             LOG.error(e)
             return None
@@ -154,8 +197,8 @@ class Taskmasterd:
 
     def start(self, name):
         try:
-            if self.programs[name]['p'].poll() == None:
-                response = f'{name} is already running|'
+            if self.programs[name]['p'].poll() is None:
+                return f'{name} is already running|'
         except:
             cwd = os.getcwd()
             work_dir = self.programs[name]['dir']
@@ -207,14 +250,14 @@ class Taskmasterd:
                     self.programs[name]['state'] = STOPPED
                     self.programs[name]['start_ts'] = None
                     break
-        if work_dir is not None:
-            try:
-                LOG.debug(f'cd to {cwd}')
-                os.chdir(cwd)
-            except IOError as e:
-                LOG.error(e)
-                return f'{e}'           
-        return response
+            if work_dir is not None:
+                try:
+                    LOG.debug(f'cd to {cwd}')
+                    os.chdir(cwd)
+                except IOError as e:
+                    LOG.error(e)
+                    return f'{e}'           
+            return response
 
 
     def stop_programs(self, command):
