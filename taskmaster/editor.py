@@ -25,6 +25,7 @@ class Editor:
         self.inkey = _Getch()
         self.hist = History()
         self.x_pos = 0
+        self.correction = 0
 
     def read_in(self):
         stdin = ''
@@ -32,6 +33,8 @@ class Editor:
         while 1:
             key = self.inkey()
             if key in self.fterm:
+                self.x_pos = 0
+                self.correction = 0
                 return self.fterm[key](self, stdin)
             elif key in self.fmap:
                 stdin = self.fmap[key](self, stdin, key)
@@ -40,43 +43,62 @@ class Editor:
                 stdin += key.decode()
             self.clear()
             print(stdin, end="", flush=True)
-            # print(f'  x: {self.x_pos}  in_len: {len(stdin)} input: {stdin}', end="", flush=True)
+            print(f'  x: {self.x_pos}  in_len: {len(stdin) - self.correction} input: {stdin}', end="", flush=True)
+        self.x_pos = 0
+        self.correction = 0
         self.hist.add(stdin)
         return stdin
 
     def arrow_up(self, stdin, key):
-        return self.hist.get_up() or stdin
+        line = self.hist.get_up()
+        if line is not None:
+            self.x_pos = len(line)
+            self.correction = 0
+            return line
+        else:
+            return stdin
 
     def arrow_down(self, stdin, key):
-        return self.hist.get_down() or stdin
+        line = self.hist.get_down()
+        if line is not None:
+            self.x_pos = len(line)
+            self.correction = 0
+            return line
+        else:
+            return stdin
 
     def arrow_right(self, stdin, key):
-        if self.x_pos < len(stdin):
+        if self.x_pos < len(stdin) - self.correction:
             self.x_pos += 1
-        #     stdin += key.decode()
+            stdin += key.decode()
+            self.correction += 3
         return stdin
 
     def arrow_left(self, stdin, key):
         if self.x_pos:
             self.x_pos -= 1
+            stdin += key.decode()
+            self.correction += 3
         return stdin
 
     def complete(self, stdin, key):
-        if len(stdin) > 0:
+        if len(stdin) - self.correction > 0:
             for c in COMMANDS:
                 if c.startswith(stdin):
                     stdin = c
+                    self.x_pos = len(stdin)
+                    self.correction = 0
                     break
         return stdin
 
     def backspace(self, stdin, key):
-        if self.x_pos > 0 and len(stdin):
+        if self.x_pos > 0 and len(stdin) - self.correction > 0:
             stdin = self.erase(stdin, self.x_pos - 1)
             self.x_pos -= 1
         return stdin
 
     def delete(self, stdin, key):
-        if self.x_pos < len(stdin):
+        if self.x_pos < len(stdin) - self.correction:
             stdin = self.erase(stdin, self.x_pos)
         return stdin
 

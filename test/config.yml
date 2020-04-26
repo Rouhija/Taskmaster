@@ -11,7 +11,7 @@ programs:
         expected_exit: [1, 3]
         startup_wait: 0
         environment: 'pillu'
-        dir: '/'
+        dir: '/home/srouhe'
         umask: 022
     scriptshort:
         command: ['/home/srouhe/hive-projects/taskmaster/test/scriptshort.sh']

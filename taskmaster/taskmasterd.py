@@ -157,6 +157,8 @@ class Taskmasterd:
             if self.programs[name]['p'].poll() == None:
                 response = f'{name} is already running|'
         except:
+            cwd = os.getcwd()
+            work_dir = self.programs[name]['dir']
             restarts = self.programs[name]['restarts']
             startup_wait = self.programs[name]['startup_wait']
             log_stdout = self.programs[name]['stdout_logfile']
@@ -170,6 +172,14 @@ class Taskmasterd:
                 stderr = open(log_stderr, 'w+')
             else:
                 stderr = DEVNULL
+
+            if work_dir is not None:
+                try:
+                    os.chdir(work_dir)
+                    LOG.debug(f'cd to working dir {work_dir}')
+                except IOError as e:
+                    LOG.error(e)
+                    return f"Can't use working dir {dir} for {name}"
 
             while 1:
                 p = Popen(
@@ -197,6 +207,13 @@ class Taskmasterd:
                     self.programs[name]['state'] = STOPPED
                     self.programs[name]['start_ts'] = None
                     break
+        if work_dir is not None:
+            try:
+                LOG.debug(f'cd to {cwd}')
+                os.chdir(cwd)
+            except IOError as e:
+                LOG.error(e)
+                return f'{e}'           
         return response
 
 

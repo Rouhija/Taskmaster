@@ -59,6 +59,8 @@ programs:
 - [ ] logs to /var/log/
 - [ ] ENVVARS IN CONFIG
 - [ ] DO unittests
+- [ ] Unexpected exit
+- [ ] Editor erase
 
 ### References
 - [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))

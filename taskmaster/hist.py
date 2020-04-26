@@ -26,6 +26,8 @@ class History:
             return None
 
     def add(self, s):
+        s = s.replace('\x1b[C', '')
+        s = s.replace('\x1b[D', '')
         self.hist.insert(0, s)
         self.curr = 0
         self.first = True
