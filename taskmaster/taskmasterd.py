@@ -32,18 +32,77 @@ UNKNOWN = 'UNKNOWN'
 SYSEXIT = 'SYSEXIT'
 
 
+class Server:
+
+    def __init__(self):
+        self.server_address = ('localhost', 10000)
+        self.client_address = None
+        self.connection = None
+        self.buf = 4096
+
+    def listen_signals(self):
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+    def signal_handler(self, signum, frame):
+        if signum == signal.SIGINT or signum == signal.SIGTERM:
+            try:
+                self.connection.close()
+            finally:
+                LOG.debug(f'server received signal {signum}: exiting')
+                os._exit(signum)
+
+    def serve_forever(self, queue):
+
+        LOG.debug('starting server')
+        self.listen_signals()
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(self.server_address)
+        self.sock.listen(1)
+
+        while 1:
+            LOG.debug('waiting for a connection')
+            self.connection, self.client_address = self.sock.accept()
+            try:
+                LOG.info(f'connection from {self.client_address}')
+                while True:
+                    data = self.connection.recv(self.buf)
+                    LOG.debug(f'received "{data}"')
+                    if data:
+                        data = data.decode()
+                        queue.put(data)
+                        if data == 'shutdown':
+                            self.stop_server()
+                            return
+                        response = queue.get()
+                        LOG.debug(f'sending response [{response}] back to the client')
+                        if response:
+                            self.connection.sendall(response.encode())
+                        else:
+                            self.connection.sendall(f'response: None'.encode())
+                    else:
+                        break
+            except Exception as e:
+                LOG.error(e)
+            finally:
+                LOG.debug(f'All data received from {self.client_address}')
+
+    def stop_server(self):
+        try:
+            self.connection.sendall('shut down successfully'.encode())
+            self.connection.close()
+        finally:
+            LOG.debug('server stopped')    
+
+
 class Taskmasterd:
 
     def __init__(self, conf):
         self.conf = conf
         self.conf_backup = conf
         self.programs = deepcopy(conf['programs'])
-        self.buf = 4096
         self.umask = 0o22
         self.directory = "/"
-        self.server_address = ('localhost', 10000)
-        self.client_address = None
-        self.connection = None
 
 
     def set_signals(self):
@@ -52,17 +111,13 @@ class Taskmasterd:
 
 
     def signal_handler(self, signum, frame):
-        if signum == signal.SIGINT or signum == signal.SIGTERM or signal.SIGABRT:
+        if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.cleanup()
 
 
     def cleanup(self):
         try:
-            self.monitor.join()
-            self.server.join()
             self.stop_programs(['all'])
-            self.connection.sendall('taskmasterd shut down successfully'.encode())
-            self.connection.close()
         finally:
             LOG.debug('taskmasterd shut down')
             sys.exit()
@@ -82,36 +137,35 @@ class Taskmasterd:
             self.start_programs(startup)
 
 
-    def listen_sockets(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(self.server_address)
-        self.sock.listen(1)
+    def run(self):
 
-
-    def start_server(self):
-        self.listen_sockets()
+        # Initialize
+        self.q = Queue()
+        self.s = Server()
         self.set_signals()
+        self.server = Process(target=self.s.serve_forever, args=(self.q, ))
 
-        self.queue = Queue()
-        self.monitor = Process(target=self.manager, args=(self.queue, ))
-        self.server = Process(target=self.server, args=(self.queue, ))
-        self.monitor.start()
+        # Start server and manager
         self.server.start()
-        # self.server()
+        self.manager()
+
+        # On exit
+        self.server.join()
+        self.cleanup()
 
 
-    def manager(self, queue):
+    def manager(self):
         LOG.debug('starting manager')
         self.init_programs()
         while 1:
             try:
                 # LOG.debug('manager: polling queue')
-                msg = queue.get(timeout=3)
-                response = self.action(msg)
+                msg = self.queue.get(timeout=3)
                 if msg == 'shutdown':
                     break
-                queue.put(response)
-            except Exception as e:
+                response = self.action(msg)
+                self.queue.put(response)
+            except:
                 # LOG.debug('manager: queue empty, checking program status')
                 for k, v in self.programs.items():
                     autorestart = self.programs[k]['autorestart'] 
@@ -125,39 +179,7 @@ class Taskmasterd:
                             LOG.info(f'{k} exited with {exit_code}')
                             if autorestart == 'unexpected':
                                 self.restart_programs([k])
-
-
-
-    def server(self, queue):
-        LOG.debug('starting server')
-        while 1:
-            LOG.debug('waiting for a connection')
-            self.connection, self.client_address = self.sock.accept()
-            try:
-                LOG.debug(f'connection from {self.client_address}')
-                # Receive data from control program
-                while True:
-                    data = self.connection.recv(self.buf)
-                    LOG.debug(f'received "{data}"')
-                    if data:
-                        data = data.decode()
-                        queue.put(data)
-                        response = queue.get()
-                        # self.connection.sendall(data.encode())
-                        # if data == 'shutdown':
-                        #     sys.exit()
-                        # response = self.action(data)
-                        LOG.debug(f'sending response [{response}] back to the client')
-                        if response:
-                            self.connection.sendall(response.encode())
-                        else:
-                            self.connection.sendall(f'response: None'.encode())
-                    else:
-                        break
-            except OSError as e:
-                LOG.error(e)
-            finally:
-                LOG.debug(f'All data received from {self.client_address}')
+        self.stop_programs(['all'])
 
 
     def action(self, command):
@@ -177,8 +199,6 @@ class Taskmasterd:
                 return self.reread()
             elif command[0] == 'update':
                 return self.update()
-            elif command[0] == 'shutdown':
-                self.cleanup()
         except Exception as e:
             LOG.error(e)
             return None
@@ -252,7 +272,7 @@ class Taskmasterd:
                     break
             if work_dir is not None:
                 try:
-                    LOG.debug(f'cd to {cwd}')
+                    LOG.debug(f'cd to cwd {cwd}')
                     os.chdir(cwd)
                 except IOError as e:
                     LOG.error(e)
@@ -466,7 +486,7 @@ def main():
     print('Server started')
     if not args.nodaemon:
         d.daemonize()
-    d.start_server()
+    d.run()
 
 
 if __name__ == '__main__':

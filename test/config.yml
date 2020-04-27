@@ -1,6 +1,6 @@
 programs:
     script:
-        command: ['/home/srouhe/hive-projects/taskmaster/test/script.sh']
+        command: ['./script.sh']
         autostart: true
         autorestart: 'unexpected'
         stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scripterr.log'
@@ -11,7 +11,7 @@ programs:
         expected_exit: [0, 3]
         startup_wait: 0
         environment: 'pillu'
-        dir: '/home/srouhe'
+        dir: '/home/srouhe/hive-projects/taskmaster/test'
         umask: 022
     scriptshort:
         command: ['/home/srouhe/hive-projects/taskmaster/test/scriptshort.sh']
