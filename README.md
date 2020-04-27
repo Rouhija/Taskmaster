@@ -71,3 +71,4 @@ programs:
 - [Supervisor](https://www.digitalocean.com/community/tutorials/how-to-install-and-manage-supervisor-on-ubuntu-and-debian-vps)
 - [Setup.py](https://amir.rachum.com/blog/2017/07/28/python-entry-points/)
 - [Pyformat](https://pyformat.info/)
+https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r

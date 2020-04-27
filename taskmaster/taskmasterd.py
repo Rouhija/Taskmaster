@@ -12,13 +12,11 @@ Options:
 
 import os
 import sys
-# import fcntl
 import signal
 import socket
 import logging
 import argparse
 from copy import deepcopy
-from multiprocessing import Process, Queue
 from os.path import dirname, realpath
 from time import gmtime, strftime, time, sleep
 from taskmaster.config import Config, ConfigError
@@ -30,93 +28,7 @@ LOG = logging.getLogger(__name__)
 RUNNING = 'RUNNING'
 STOPPED = 'STOPPED'
 UNKNOWN = 'UNKNOWN'
-SYSEXIT = 'SYSEXIT'
-
-
-class Server:
-
-    def __init__(self):
-        self.server_address = ('localhost', 10000)
-        self.client_address = None
-        self.connection = None
-        self.buf = 4096
-
-    def listen_signals(self):
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
-
-    def signal_handler(self, signum, frame):
-        if signum == signal.SIGINT or signum == signal.SIGTERM:
-            try:
-                self.connection.close()
-            finally:
-                LOG.debug(f'server received signal {signum}: exiting')
-                os._exit(signum)
-
-    def serve_forever(self, queue):
-
-        LOG.debug('starting server')
-        self.listen_signals()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(self.server_address)
-        self.sock.listen(1)
-        self.sock.settimeout(2)
-
-        while 1:
-            LOG.debug('waiting for a connection')
-            try:
-                self.connection, self.client_address = self.sock.accept()
-            except socket.timeout as e:
-                err = e.args[0]
-                if err == 'timed out':
-                    sleep(1)
-                    print('no connection, check programs')
-                    continue
-            try:
-                LOG.info(f'connection from {self.client_address}')
-                # fcntl.fcntl(self.sock, fcntl.F_SETFL, os.O_NONBLOCK)
-                self.connection.settimeout(2)
-                while True:
-                    try:
-                        data = self.connection.recv(self.buf)
-                        LOG.debug(f'received "{data}"')
-                        if data:
-                            data = data.decode()
-                            queue.put(data)
-                            if data == 'shutdown':
-                                self.stop_server()
-                                return
-                            response = queue.get()
-                            LOG.debug(f'sending response [{response}] back to the client')
-                            if response:
-                                self.connection.sendall(response.encode())
-                            else:
-                                self.connection.sendall(f'response: None'.encode())
-                        else:
-                            break
-                    except socket.timeout as e:
-                        err = e.args[0]
-                        # this next if/else is a bit redundant, but illustrates how the
-                        # timeout exception is setup
-                        if err == 'timed out':
-                            sleep(1)
-                            print('recv timed out, retry later')
-                            continue
-                    except socket.error as e:
-                        # Something else happened, handle error, exit, etc.
-                        print(e)
-                        sys.exit(1)                   
-            except Exception as e:
-                LOG.error(e)
-            finally:
-                LOG.debug(f'All data received from {self.client_address}')
-
-    def stop_server(self):
-        try:
-            self.connection.sendall('shut down successfully'.encode())
-            self.connection.close()
-        finally:
-            LOG.debug('server stopped')    
+SYSEXIT = 'KILLED'
 
 
 class Taskmasterd:
@@ -127,25 +39,33 @@ class Taskmasterd:
         self.programs = deepcopy(conf['programs'])
         self.umask = 0o22
         self.directory = "/"
+        self.exit = False
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_address = ('localhost', 10000)
+        self.client_address = None
+        self.connection = None
+        self.buf = 1028
+        self.conn_timeout = 3 # prefer shorter timeouts
+        self.data_timeout = 10 # set to high, 30 etc.
 
-
-    def set_signals(self):
+    def listen_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
-
 
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGTERM:
             self.cleanup()
 
-
     def cleanup(self):
         try:
             self.stop_programs(['all'])
+            self.connection.sendall('shut down successfully'.encode())
+            self.connection.close()
+        except Exception as e:
+            LOG.warn(f'Error in shutting down: {e}')
         finally:
             LOG.debug('taskmasterd shut down')
             sys.exit()
-
 
     def init_programs(self):
         startup = []
@@ -160,53 +80,90 @@ class Taskmasterd:
         if len(startup):
             self.start_programs(startup)
 
-
     def run(self):
-
-        # Initialize
-        self.q = Queue()
-        self.server = Server()
-        self.set_signals()
-        # self.server = Process(target=self.s.serve_forever, args=(self.q, ))
-        # self.manager = Process(target=self.manager, args=())
-
-        # Start server and manager
-        self.server.serve_forever(self.q)
-        # self.manager()
-
-        # On exit
-        # self.server.join()
-        # self.manager.join()
+        # Try catch tahan ja muualle raise
+        self.listen_signals()
+        self.init_programs()
+        self.server()
         self.cleanup()
 
+    def server(self):
+
+        LOG.debug('starting server')
+        self.sock.bind(self.server_address)
+        self.sock.listen(1)
+        self.sock.settimeout(self.conn_timeout)
+
+        while 1:
+            LOG.debug('waiting for a connection')
+            try:
+                self.connection, self.client_address = self.sock.accept()
+                self.connection_received()
+                if self.exit is True:
+                    return
+            except socket.timeout as e:
+                if e.args[0] == 'timed out':
+                    sleep(1)
+                    LOG.debug(f'no connection after {self.conn_timeout} seconds, checking programs')
+                    self.manager()
+            except socket.error as e:
+                LOG.error(e)
+                return  
+
+    def connection_received(self):
+        try:
+            LOG.info(f'connection from {self.client_address}')
+            self.connection.settimeout(self.data_timeout)
+            while True:
+                try:
+                    data = self.connection.recv(self.buf)
+                    LOG.debug(f'received "{data}"')
+                    if data:
+                        data = data.decode()
+                        if data == 'shutdown':
+                            self.exit = True
+                            return
+                        response = self.action(data)
+                        LOG.debug(f'sending response [{response}] back to the client')
+                        if response:
+                            self.connection.sendall(response.encode())
+                        else:
+                            self.connection.sendall(f'response: None'.encode())
+                    else:
+                        break
+                except socket.timeout as e:
+                    if e.args[0] == 'timed out':
+                        sleep(1)
+                        LOG.debug(f'no data from {self.client_address} after {self.data_timeout} seconds, checking programs')
+                        self.manager()
+                        continue
+                except socket.error as e:
+                    LOG.error(e)
+                    self.exit = True
+                    return                
+        except Exception as e:
+            LOG.error(e)
+        finally:
+            LOG.debug(f'All data received from {self.client_address}')
 
     def manager(self):
-        LOG.debug('starting manager')
-        self.init_programs()
-        while 1:
-            try:
-                msg = self.queue.get(timeout=3)
-                if msg == 'shutdown':
-                    break
-                LOG.error('AAAAAAAAAAAAAAAAAAAAAAAA')
-                response = self.action(msg)
-                self.queue.put(response)
-            except:
-                # LOG.debug('manager: queue empty, checking program status')
-                for k, v in self.programs.items():
-                    autorestart = self.programs[k]['autorestart'] 
-                    p = self.programs[k]['p']
-                    if p is not None:
-                        exit_code = p.poll()
-                        if exit_code is not None and self.programs[k]['state'] == RUNNING:
-                            self.programs[k]['state'] = SYSEXIT
-                            self.programs[k]['start_ts'] = None
-                            self.programs[k]['pid'] = None
-                            LOG.info(f'{k} exited with {exit_code}')
-                            if autorestart == 'unexpected':
-                                self.restart_programs([k])
-        self.stop_programs(['all'])
-
+        try:
+            for k, v in self.programs.items():
+                autorestart = self.programs[k]['autorestart'] 
+                p = self.programs[k]['p']
+                if p is not None:
+                    exit_code = p.poll()
+                    if exit_code is not None and self.programs[k]['state'] == RUNNING:
+                        self.programs[k]['state'] = SYSEXIT
+                        self.programs[k]['start_ts'] = None
+                        self.programs[k]['pid'] = None
+                        LOG.info(f'{k} exited with {exit_code}')
+                        if autorestart == 'unexpected':
+                            self.restart_programs([k])
+        except Exception as e:
+            LOG.error(f'manager: {e}')
+        finally:
+            return
 
     def action(self, command):
         command = command.split(' ')
@@ -229,7 +186,6 @@ class Taskmasterd:
             LOG.error(e)
             return None
 
-
     def start_programs(self, command):
         response = ''
         if command[0] == 'all':
@@ -239,7 +195,6 @@ class Taskmasterd:
         for name in command:
             response += self.start(name)
         return response
-
 
     def start(self, name):
         try:
@@ -305,7 +260,6 @@ class Taskmasterd:
                     return f'{e}'           
             return response
 
-
     def stop_programs(self, command):
         response = ''
         if command[0] == 'all':
@@ -315,7 +269,6 @@ class Taskmasterd:
         for name in command:
             response += self.stop(name)
         return response
-
 
     def stop(self, name):
         if self.programs[name]['p'] is not None:
@@ -341,7 +294,6 @@ class Taskmasterd:
             response = f'{name} is already stopped|'
         return response
 
-
     def restart_programs(self, command):
         response = ''
         LOG.info(f'Restarting programs {command}')
@@ -350,7 +302,6 @@ class Taskmasterd:
             response += self.start(name)
             response = response.replace('started', 'restarted')
         return response
-
 
     def get_status(self):
         status = ''
@@ -371,7 +322,6 @@ class Taskmasterd:
                 status += 'uptime {:{width}} |'.format('--:--:--', width=10)
         return status
 
-
     def reread(self):
         response = None
         try:
@@ -383,7 +333,6 @@ class Taskmasterd:
             response = f"Couldn't read configuration:|-->\t{e}"
         finally:
             return response
-
 
     def update(self):
         try:
@@ -422,7 +371,6 @@ class Taskmasterd:
             return f'Error in update: {e}'
         self.conf_backup = self.conf
         return 'Update ran successfully'
-
     
     def tail(self, name, fd):
         stream = f'{fd}_logfile'
@@ -443,7 +391,6 @@ class Taskmasterd:
                 return err.decode()
         else:
             return f'No {fd} logfile specified for {name}: output is directed to /dev/null'
-
 
     def daemonize(self):
         """

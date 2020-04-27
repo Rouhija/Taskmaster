@@ -34,8 +34,7 @@ class Console:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_address = ('localhost', 10000)
-        self.buf = 16
-        self.sock.settimeout(0.5)
+        self.buf = 8192
 
 
     def set_signals(self):
@@ -96,10 +95,8 @@ class Console:
                 LOG.error(f'Daemon is not responding: {e}')
 
             # Get response
-            while 1:
-                r = self.sock.recv(self.buf)
-                if not r:
-                    break
+            r = self.sock.recv(self.buf)
+            if r:
                 response += r.decode()
             LOG.info('Received from taskmasterd "%s"' % response)
 
