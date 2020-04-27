@@ -12,6 +12,7 @@ Options:
 
 import os
 import sys
+# import fcntl
 import signal
 import socket
 import logging
@@ -59,29 +60,52 @@ class Server:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind(self.server_address)
         self.sock.listen(1)
+        self.sock.settimeout(2)
 
         while 1:
             LOG.debug('waiting for a connection')
-            self.connection, self.client_address = self.sock.accept()
+            try:
+                self.connection, self.client_address = self.sock.accept()
+            except socket.timeout as e:
+                err = e.args[0]
+                if err == 'timed out':
+                    sleep(1)
+                    print('no connection, check programs')
+                    continue
             try:
                 LOG.info(f'connection from {self.client_address}')
+                # fcntl.fcntl(self.sock, fcntl.F_SETFL, os.O_NONBLOCK)
+                self.connection.settimeout(2)
                 while True:
-                    data = self.connection.recv(self.buf)
-                    LOG.debug(f'received "{data}"')
-                    if data:
-                        data = data.decode()
-                        queue.put(data)
-                        if data == 'shutdown':
-                            self.stop_server()
-                            return
-                        response = queue.get()
-                        LOG.debug(f'sending response [{response}] back to the client')
-                        if response:
-                            self.connection.sendall(response.encode())
+                    try:
+                        data = self.connection.recv(self.buf)
+                        LOG.debug(f'received "{data}"')
+                        if data:
+                            data = data.decode()
+                            queue.put(data)
+                            if data == 'shutdown':
+                                self.stop_server()
+                                return
+                            response = queue.get()
+                            LOG.debug(f'sending response [{response}] back to the client')
+                            if response:
+                                self.connection.sendall(response.encode())
+                            else:
+                                self.connection.sendall(f'response: None'.encode())
                         else:
-                            self.connection.sendall(f'response: None'.encode())
-                    else:
-                        break
+                            break
+                    except socket.timeout as e:
+                        err = e.args[0]
+                        # this next if/else is a bit redundant, but illustrates how the
+                        # timeout exception is setup
+                        if err == 'timed out':
+                            sleep(1)
+                            print('recv timed out, retry later')
+                            continue
+                    except socket.error as e:
+                        # Something else happened, handle error, exit, etc.
+                        print(e)
+                        sys.exit(1)                   
             except Exception as e:
                 LOG.error(e)
             finally:
@@ -141,16 +165,18 @@ class Taskmasterd:
 
         # Initialize
         self.q = Queue()
-        self.s = Server()
+        self.server = Server()
         self.set_signals()
-        self.server = Process(target=self.s.serve_forever, args=(self.q, ))
+        # self.server = Process(target=self.s.serve_forever, args=(self.q, ))
+        # self.manager = Process(target=self.manager, args=())
 
         # Start server and manager
-        self.server.start()
-        self.manager()
+        self.server.serve_forever(self.q)
+        # self.manager()
 
         # On exit
-        self.server.join()
+        # self.server.join()
+        # self.manager.join()
         self.cleanup()
 
 
@@ -159,10 +185,10 @@ class Taskmasterd:
         self.init_programs()
         while 1:
             try:
-                # LOG.debug('manager: polling queue')
                 msg = self.queue.get(timeout=3)
                 if msg == 'shutdown':
                     break
+                LOG.error('AAAAAAAAAAAAAAAAAAAAAAAA')
                 response = self.action(msg)
                 self.queue.put(response)
             except:
