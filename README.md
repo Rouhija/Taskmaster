@@ -1,14 +1,14 @@
-# Taskmaster
+# Description
 UNIX job control program, much like [Supervisor](http://supervisord.org/). Consists of two programs, taskmasterd is a server daemon which does the actual job control work. Taskmasterctl is an interactive UI for communicating with the daemon.
 
-## Installation
+### Installation
 ```sh
 virtualenv venv -p python3 && source venv/bin/activate
 pip install -r requirements.txt
 python3 setup.py develop
 ```
 
-## Usage
+### Usage
 
 Launch server
 ```sh
@@ -22,10 +22,10 @@ taskmasterctl
 
 Run tests
 ```sh
-python setup.py test
+python3 setup.py test
 ```
 
-## Configuration
+### Configuration
 ```yaml
 programs:
     program_name:
@@ -47,7 +47,7 @@ server:
     port: 9999 - REQUIRED
 ```
 
-## Commands
+### Commands
 | CMD | ACTION |
 |---------|---------|
 | help | Display commands |
@@ -61,5 +61,5 @@ server:
 | shutdown | Terminate taskmasterd |
 | quit/exit | Exit |
 
-## Dependencies
+### Dependencies
 - PyYAML==5.1
