@@ -50,10 +50,11 @@ class Taskmasterd:
 
     def listen_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGQUIT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
     def signal_handler(self, signum, frame):
-        if signum == signal.SIGINT or signum == signal.SIGTERM:
+        if signum == signal.SIGINT or signum == signal.SIGQUIT or signum == signal.SIGTERM:
             self.cleanup()
 
     def cleanup(self):
@@ -62,7 +63,7 @@ class Taskmasterd:
             self.connection.sendall('shut down successfully'.encode())
             self.connection.close()
         except Exception as e:
-            LOG.warn(f'Error in shutting down: {e}')
+            LOG.warn(f'shut down: {e}')
         finally:
             LOG.debug('taskmasterd shut down')
             sys.exit()
@@ -296,6 +297,10 @@ class Taskmasterd:
 
     def restart_programs(self, command):
         response = ''
+        if command[0] == 'all':
+            for k, _ in self.programs.items():
+                command.append(k)
+            command.pop(0)
         LOG.info(f'Restarting programs {command}')
         for name in command:
             self.stop(name)
