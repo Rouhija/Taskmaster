@@ -14,7 +14,7 @@ LOG = logging.getLogger(__name__)
 class DaemonTests(unittest.TestCase):
 
     def setUp(self):
-        logging.basicConfig(level='INFO')
+        logging.basicConfig(level='ERROR')
         self.c = Config()
         self.d = Taskmasterd(self.c.conf)
         self.d.init_programs()
@@ -32,66 +32,89 @@ class DaemonTests(unittest.TestCase):
         return r
 
     def prog_status(self, resp, p, stat):
+        flag = False
         resp = resp.split('|')
         for line in resp:
-            if p in line:
+            if line and (p in line or p == 'all'):
                 if stat in line:
-                    return True
-        return False
+                    flag = True
+                else:
+                    flag = False
+        return flag
 
     def test_00(self):
-        excepted = 4
+        expected = 4
         response = self.d.action('status')
         result = self.parse_response(response)
-        self.assertEqual(excepted, len(result))
+        self.assertEqual(expected, len(result))
 
     def test_01(self):
-        excepted = 'stopped scriptshort successfully|'
+        expected = 'stopped scriptshort successfully|'
         response = self.d.action('stop scriptshort')
-        self.assertEqual(excepted, response)
-        excepted = 'scriptshort is already stopped|'
+        self.assertEqual(expected, response)
+        expected = 'scriptshort is already stopped|'
         response = self.d.action('stop scriptshort')
-        self.assertEqual(excepted, response)
+        self.assertEqual(expected, response)
 
     def test_02(self):
-        excepted = 'scriptshort restarted successfully|'
+        expected = 'scriptshort restarted successfully|'
         response = self.d.action('restart scriptshort')
-        self.assertEqual(excepted, response)
+        self.assertEqual(expected, response)
 
     def test_03(self):
-        excepted = 'Configuration file reread successfully - run `update` to apply changes'
+        expected = 'Configuration file reread successfully - run `update` to apply changes'
         response = self.d.action('reread')
-        self.assertEqual(excepted, response)
-        excepted = 'Update ran successfully'
+        self.assertEqual(expected, response)
+        expected = 'Update ran successfully'
         response = self.d.action('update')
-        self.assertEqual(excepted, response)
+        self.assertEqual(expected, response)
 
     def test_04(self):
-        excepted = True
+        expected = True
         p = Popen(['killall', '-9', 'scriptshort.sh'])
         p.wait()
         self.d.manager()
         response = self.d.action('status')
-        result = self.prog_status(response, 'scriptshort', 'KILLED')
-        self.assertEqual(excepted, result)
+        result = self.prog_status(response, 'scriptshort', 'EXITED')
+        self.assertEqual(expected, result)
 
     def test_05(self):
-        excepted = True
+        expected = True
         p = Popen(['killall', '-15', 'script.sh'])
         p.wait()
         self.d.manager()
         response = self.d.action('status')
-        result = self.prog_status(response, 'script', 'KILLED')
-        self.assertEqual(excepted, result)
+        result = self.prog_status(response, 'script', 'EXITED')
+        self.assertEqual(expected, result)
 
     def test_06(self):
-        excepted = True
+        expected = True
         p = Popen(['killall', '-9', 'script.sh'])
         p.wait()
         self.d.manager()
         response = self.d.action('status')
         result = self.prog_status(response, 'script', 'RUNNING')
-        self.assertEqual(excepted, result)
+        self.assertEqual(expected, result)
+
+    def test_07(self):
+        expected = 'echoing to stdout'
+        response = self.d.action('tail short_echo stdout')
+        self.assertEqual(expected, response.strip())
+        expected = 'echoing to stderr'
+        response = self.d.action('tail short_echo stderr')
+        self.assertEqual(expected, response.strip())
+
+    def test_08(self):
+        expected = b'error!\n'
+        response = self.d.programs['script(0)']['p'].stderr.readline()
+        self.assertEqual(expected, response)
+
+    def test_09(self):
+        expected = True
+        self.d.action('restart all')
+        response = self.d.action('status')
+        result = self.prog_status(response, 'all', 'RUNNING')
+        self.assertEqual(expected, result)
 
 
 if __name__ == "__main__":

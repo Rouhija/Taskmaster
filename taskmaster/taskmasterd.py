@@ -29,7 +29,7 @@ LOG = logging.getLogger(__name__)
 RUNNING = 'RUNNING'
 STOPPED = 'STOPPED'
 UNKNOWN = 'UNKNOWN'
-KILLED = 'KILLED'
+KILLED = 'EXITED'
 
 
 class Taskmasterd:
@@ -190,7 +190,7 @@ class Taskmasterd:
                 return self.update()
         except Exception as e:
             LOG.error(f'action: {e}')
-            return None
+            return f'{e} not found'
 
     def start_programs(self, command):
         response = ''
@@ -280,10 +280,11 @@ class Taskmasterd:
         if p is not None:
             kill_signal = self.programs[name]['stop_signal']
             kill_timeout = self.programs[name]['kill_timeout']
-
+            if self.programs[name]['stdout_logfile'] == PIPE:
+                p.stdout.close()
+            if self.programs[name]['stderr_logfile'] == PIPE:
+                p.stderr.close()
             LOG.info(f'Stopping process {self.programs[name]["pid"]}')
-            # p.stdout.close()
-            # p.stderr.close()
             p.send_signal(kill_signal)
             try:
                 p.wait(timeout=kill_timeout)
@@ -388,22 +389,38 @@ class Taskmasterd:
     def tail(self, name, fd):
         stream = f'{fd}_logfile'
         logs = self.programs[name][stream]
-        if isinstance(logs, str):
+        if logs == '/dev/null':
+            return f'{name}: output is directed to /dev/null'
+        elif isinstance(logs, str):
             p = Popen(
                 ['tail', logs],
                 stdout=PIPE,
                 stderr=PIPE
             )
             try:
-                out, err = p.communicate(timeout=5)
+                out, err = p.communicate(timeout=3)
             except TimeoutExpired:
-                return 'Error calling tail (timeout after 5 seconds)'
+                return 'Error calling tail (timeout after 3 seconds)'
             if len(out):
                 return out.decode()
             elif len(err):
                 return err.decode()
         else:
-            return f'No {fd} logfile specified for {name}: output is directed to /dev/null'
+            p = self.programs[name]['p']
+            r = ''
+            i = 0
+            while i < 10:
+                if fd == 'stdout':
+                    line = p.stdout.readline()
+                elif fd == 'stderr':
+                    line = p.stderr.readline()
+                else:
+                    return None
+                if line:
+                    r += f'{line}|'
+                i += 1
+            return r
+
 
     def check_if_running(self, name):
         if 'p' in self.programs[name]:
@@ -446,15 +463,15 @@ class Taskmasterd:
 def logger_options(nodaemon):
     if nodaemon:
         logging.basicConfig(
-            level=logging.DEBUG,
+            level=logging.INFO,
             format='%(levelname)s:%(asctime)s ⁠— %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
         )
     else:
         work_dir = dirname(realpath(__file__))
         logging.basicConfig(
-            filename=f'{work_dir}/logs/taskmasterd.log',
-            level=logging.DEBUG,
+            filename=f'{work_dir}/resources/logs/taskmasterd.log',
+            level=logging.INFO,
             format='%(levelname)s:%(asctime)s ⁠— %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
         )

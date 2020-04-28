@@ -44,18 +44,18 @@ programs:
         dir: path
         umask: octal, eg. 0o22
 server:
-    port: 9999 - REQUIRED
+    port: eg. 9999 - REQUIRED
 ```
 
 ### Commands
 | CMD | ACTION |
 |---------|---------|
-| help | Display commands |
+| help | Display help |
 | status | Display processes |
-| start <name> | Start program |
-| stop <name> | Stop program |
-| restart <name> | Restart program |
-| tail <name> <stdout/stderr> | Read last 10 entries from program logs |
+| start *name/all* | Start program |
+| stop *name/all* | Stop program |
+| restart *name/all* | Restart program |
+| tail *name stdout/stderr* | Read last 10 entries from program logs |
 | reread | Reread configuration file |
 | update | Apply configuration file changes |
 | shutdown | Terminate taskmasterd |

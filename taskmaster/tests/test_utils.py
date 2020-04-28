@@ -7,7 +7,7 @@ LOG = logging.getLogger(__name__)
 class UtilTests(unittest.TestCase):
 
     def setUp(self):
-        logging.basicConfig(level='INFO')
+        logging.basicConfig(level='ERROR')
 
     def test_00(self):
         expected = True

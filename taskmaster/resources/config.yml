@@ -3,9 +3,8 @@ programs:
         command: ['./script.sh']
         autostart: true
         autorestart: 'unexpected'
-        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/scripterr.log'
         stdout_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/scriptout.log'
-        instances: 3
+        instances: 2
         stop_signal: 15
         kill_timeout: 5
         restarts: 9
@@ -15,10 +14,19 @@ programs:
         dir: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources'
         umask: 0o22
     scriptshort:
-        command: ['/home/srouhe/hive-projects/taskmaster/taskmaster/resources/scriptshort.sh']
+        command: ['./scriptshort.sh']
         autostart: true
         autorestart: 'never'
-        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/scriptshorterr.log'
-        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/scriptshortout.log'
+        stderr_logfile: '/dev/null'
+        stdout_logfile: '/dev/null'
+        dir: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources'
+    short_echo:
+        command: ['./echo.sh']
+        autostart: true
+        autorestart: 'unexpected'
+        expected_exit: [0]
+        stderr_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/echo_out.log'
+        stdout_logfile: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources/logs/echo_err.log'
+        dir: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources'
 server:
     port: 9999

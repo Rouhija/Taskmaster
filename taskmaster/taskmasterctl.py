@@ -125,7 +125,7 @@ def logger_options(debug: int):
     else:
         work_dir = dirname(realpath(__file__))
         logging.basicConfig(
-            filename=f'{work_dir}/logs/taskmasterctl.log',
+            filename=f'{work_dir}/resources/logs/taskmasterctl.log',
             level=logging.DEBUG,
             format='%(levelname)s:%(asctime)s ⁠— %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
