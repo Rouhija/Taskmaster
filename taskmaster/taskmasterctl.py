@@ -12,6 +12,7 @@ import socket
 import signal
 import logging
 import argparse
+from subprocess import Popen, PIPE
 from taskmaster.editor import Editor
 from taskmaster.config import Config
 from os.path import dirname, realpath
@@ -31,9 +32,9 @@ SNEK = """\
 
 class Console:
 
-    def __init__(self):
+    def __init__(self, port):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_address = ('localhost', 10000)
+        self.server_address = ('localhost', port)
         self.buf = 8192
 
 
@@ -141,7 +142,8 @@ def main():
     print(SNEK)
     args = arg_parser()
     logger_options(args.debug)
-    c = Console()
+    conf = Config(ctl=True)
+    c = Console(conf.port)
     c.run_forever()
 
 

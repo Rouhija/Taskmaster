@@ -5,17 +5,20 @@ programs:
         autorestart: 'unexpected'
         stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scripterr.log'
         stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptout.log'
+        instances: 3
         stop_signal: 15
         kill_timeout: 5
         restarts: 9
-        expected_exit: [0, 3]
+        expected_exit: [0, -15]
         startup_wait: 0
-        environment: 'pillu'
-        dir: '/home/srouhe/hive-projects/taskmaster/test'
-        umask: 022
+        environment: ['var:value', 'var2:val']
+        dir: '/home/srouhe/hive-projects/taskmaster/taskmaster/resources'
+        umask: 0o22
     scriptshort:
-        command: ['/home/srouhe/hive-projects/taskmaster/test/scriptshort.sh']
-        autostart: false
-        autorestart: 'always'
+        command: ['/home/srouhe/hive-projects/taskmaster/taskmaster/resources/scriptshort.sh']
+        autostart: true
+        autorestart: 'never'
         stderr_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshorterr.log'
         stdout_logfile: '/home/srouhe/hive-projects/taskmaster/logs/scriptshortout.log'
+server:
+    port: 9999

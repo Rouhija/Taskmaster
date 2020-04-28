@@ -15,6 +15,7 @@ dist = setup(
     author="Sami Rouhe",
     author_email="rouhesami@gmail.com",
 	packages=find_packages(),
+    test_suite="taskmaster.tests",
     entry_points={
         'console_scripts': [
 			'taskmasterd = taskmaster.taskmasterd:main',

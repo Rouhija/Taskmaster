@@ -1,5 +1,5 @@
 # Taskmaster
-UNIX job control program, much like [Supervisor](http://supervisord.org/)
+UNIX job control program, much like [Supervisor](http://supervisord.org/). Consists of two programs, taskmasterd is a server daemon which does the actual job control work. Taskmasterctl is an interactive UI for communicating with the daemon.
 
 ## Installation
 ```sh
@@ -20,23 +20,31 @@ Run client in interactive mode
 taskmasterctl
 ```
 
-## Config file options
+Run tests
+```sh
+python setup.py test
+```
+
+## Configuration
 ```yaml
 programs:
     program_name:
-        command: list[path, arg, ...] - REQUIRED
+        command: list[bin, arg, arg, ...] - REQUIRED
         autostart: true/false
-        autorestart: ['always', 'never', 'unexpected_only']
+        autorestart: ['always', 'never', 'unexpected']
         stderr_logfile: path
         stdout_logfile: path
-        stop_signal: 1, 3, 5, 9 etc
+        instances: int
+        stop_signal: 1, 3, 5, 9 etc.
         kill_timeout: int(seconds)
         restarts: int
         expected_exit: [int, int, ...]
         startup_wait: int(seconds)
-        environment: [str=str, str=str, ...]
+        environment: [key:val, key:val, ...]
         dir: path
-        umask: octal, eg. 022
+        umask: octal, eg. 0o22
+server:
+    port: 9999 - REQUIRED
 ```
 
 ## Commands
@@ -54,21 +62,4 @@ programs:
 | quit/exit | Exit |
 
 ## Dependencies
-
-### To-Do
-- [ ] logs to /var/log/
-- [ ] ENVVARS IN CONFIG
-- [ ] DO unittests
-- [ ] Unexpected exit
-- [x] Queue from Server to monitor which controls?
-- [ ] Shutdown errors
-- [ ] Check start and stop logic
-
-### References
-- [Daemons](https://en.wikipedia.org/wiki/Daemon_(computing))
-- [DaemonsMore](http://www.cems.uwe.ac.uk/~irjohnso/coursenotes/lrc/system/daemons/d3.htm)
-- [Sockets](https://pymotw.com/2/socket/tcp.html)
-- [Supervisor](https://www.digitalocean.com/community/tutorials/how-to-install-and-manage-supervisor-on-ubuntu-and-debian-vps)
-- [Setup.py](https://amir.rachum.com/blog/2017/07/28/python-entry-points/)
-- [Pyformat](https://pyformat.info/)
-https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r
+- PyYAML==5.1

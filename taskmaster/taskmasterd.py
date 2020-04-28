@@ -10,6 +10,7 @@ Options:
 -n/--nodaemon -- run taskmasterd in the foreground
 """
 
+import io
 import os
 import sys
 import signal
@@ -20,7 +21,7 @@ from copy import deepcopy
 from os.path import dirname, realpath
 from time import gmtime, strftime, time, sleep
 from taskmaster.config import Config, ConfigError
-from subprocess import DEVNULL, PIPE, Popen, TimeoutExpired
+from subprocess import PIPE, Popen, TimeoutExpired
 
 
 LOG = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ LOG = logging.getLogger(__name__)
 RUNNING = 'RUNNING'
 STOPPED = 'STOPPED'
 UNKNOWN = 'UNKNOWN'
-SYSEXIT = 'KILLED'
+KILLED = 'KILLED'
 
 
 class Taskmasterd:
@@ -41,7 +42,7 @@ class Taskmasterd:
         self.directory = "/"
         self.exit = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_address = ('localhost', 10000)
+        self.server_address = ('localhost', conf['server']['port'])
         self.client_address = None
         self.connection = None
         self.buf = 1028
@@ -65,6 +66,7 @@ class Taskmasterd:
         except Exception as e:
             LOG.warn(f'shut down: {e}')
         finally:
+            self.sock.close()
             LOG.debug('taskmasterd shut down')
             sys.exit()
 
@@ -82,36 +84,39 @@ class Taskmasterd:
             self.start_programs(startup)
 
     def run(self):
-        # Try catch tahan ja muualle raise
         self.listen_signals()
         self.init_programs()
-        self.server()
+        self.serve_forever()
         self.cleanup()
 
-    def server(self):
+    def serve_forever(self):
 
         LOG.debug('starting server')
-        self.sock.bind(self.server_address)
-        self.sock.listen(1)
-        self.sock.settimeout(self.conn_timeout)
+        try:
+            self.sock.bind(self.server_address)
+            self.sock.listen(1)
+            self.sock.settimeout(self.conn_timeout)
+        except OSError:
+            LOG.error(f'port {self.conf["server"]["port"]} is in use, exiting')
+            return
 
         while 1:
             LOG.debug('waiting for a connection')
             try:
                 self.connection, self.client_address = self.sock.accept()
-                self.connection_received()
+                self.connection_established()
                 if self.exit is True:
                     return
             except socket.timeout as e:
                 if e.args[0] == 'timed out':
-                    sleep(1)
+                    sleep(0.5)
                     LOG.debug(f'no connection after {self.conn_timeout} seconds, checking programs')
                     self.manager()
             except socket.error as e:
                 LOG.error(e)
                 return  
 
-    def connection_received(self):
+    def connection_established(self):
         try:
             LOG.info(f'connection from {self.client_address}')
             self.connection.settimeout(self.data_timeout)
@@ -134,7 +139,7 @@ class Taskmasterd:
                         break
                 except socket.timeout as e:
                     if e.args[0] == 'timed out':
-                        sleep(1)
+                        sleep(0.5)
                         LOG.debug(f'no data from {self.client_address} after {self.data_timeout} seconds, checking programs')
                         self.manager()
                         continue
@@ -155,11 +160,11 @@ class Taskmasterd:
                 if p is not None:
                     exit_code = p.poll()
                     if exit_code is not None and self.programs[k]['state'] == RUNNING:
-                        self.programs[k]['state'] = SYSEXIT
+                        self.programs[k]['state'] = KILLED
                         self.programs[k]['start_ts'] = None
                         self.programs[k]['pid'] = None
                         LOG.info(f'{k} exited with {exit_code}')
-                        if autorestart == 'unexpected':
+                        if autorestart == 'always' or (autorestart == 'unexpected' and exit_code not in self.programs[k]['expected_exit']):
                             self.restart_programs([k])
         except Exception as e:
             LOG.error(f'manager: {e}')
@@ -184,7 +189,7 @@ class Taskmasterd:
             elif command[0] == 'update':
                 return self.update()
         except Exception as e:
-            LOG.error(e)
+            LOG.error(f'action: {e}')
             return None
 
     def start_programs(self, command):
@@ -198,68 +203,67 @@ class Taskmasterd:
         return response
 
     def start(self, name):
-        try:
-            if self.programs[name]['p'].poll() is None:
-                return f'{name} is already running|'
-        except:
-            cwd = os.getcwd()
-            work_dir = self.programs[name]['dir']
-            restarts = self.programs[name]['restarts']
-            startup_wait = self.programs[name]['startup_wait']
-            log_stdout = self.programs[name]['stdout_logfile']
-            log_stderr = self.programs[name]['stderr_logfile']
+        if self.check_if_running(name):
+            return f'{name} is already running|'
+        cwd = os.getcwd()
+        work_dir = self.programs[name]['dir']
+        restarts = self.programs[name]['restarts']
+        startup_wait = self.programs[name]['startup_wait']
+        log_stdout = self.programs[name]['stdout_logfile']
+        log_stderr = self.programs[name]['stderr_logfile']
 
-            if isinstance(log_stdout, str):
-                stdout = open(log_stdout, 'w+')
+        if isinstance(log_stdout, str):
+            log_stdout = open(log_stdout, 'w+')
+        if isinstance(log_stderr, str):
+            log_stderr = open(log_stderr, 'w+')
+
+        if work_dir is not None:
+            try:
+                os.chdir(work_dir)
+                LOG.debug(f'cd to working dir {work_dir}')
+            except IOError as e:
+                LOG.error(e)
+                return f"Can't use working dir {dir} for {name}"
+        os.umask(self.programs[name]['umask'])
+        while 1:
+            p = Popen(
+                self.programs[name]['command'],
+                stdout=log_stdout,
+                stderr=log_stderr,
+                env=self.programs[name]['environment']
+            )
+            sleep(startup_wait)
+            if p.poll() is None:
+                self.programs[name]['p'] = p
+                self.programs[name]['state'] = RUNNING
+                self.programs[name]['start_ts'] = time()
+                self.programs[name]['pid'] = p.pid
+                LOG.info(f'{name} started successfully with pid {p.pid}')
+                response = f'{name} started successfully|'
+                break
+            elif restarts:
+                sleep(0.1)
+                restarts -= 1
             else:
-                stdout = DEVNULL
-            if isinstance(log_stderr, str):
-                stderr = open(log_stderr, 'w+')
-            else:
-                stderr = DEVNULL
-
-            if work_dir is not None:
-                try:
-                    os.chdir(work_dir)
-                    LOG.debug(f'cd to working dir {work_dir}')
-                except IOError as e:
-                    LOG.error(e)
-                    return f"Can't use working dir {dir} for {name}"
-
-            while 1:
-                p = Popen(
-                    self.programs[name]['command'],
-                    stdout=stdout,
-                    stderr=stderr
-                )
-                sleep(startup_wait)
-                if p.poll() == None:
-                    self.programs[name]['p'] = p
-                    self.programs[name]['state'] = RUNNING
-                    self.programs[name]['start_ts'] = time()
-                    self.programs[name]['pid'] = p.pid
-                    LOG.info(f'{name} started successfully with pid {p.pid}')
-                    response = f'{name} started successfully|'
-                    break
-                elif restarts:
-                    sleep(0.1)
-                    restarts -= 1
-                else:
-                    LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
-                    response = f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries'
-                    self.programs[name]['p'] = None
-                    self.programs[name]['pid'] = None
-                    self.programs[name]['state'] = STOPPED
-                    self.programs[name]['start_ts'] = None
-                    break
-            if work_dir is not None:
-                try:
-                    LOG.debug(f'cd to cwd {cwd}')
-                    os.chdir(cwd)
-                except IOError as e:
-                    LOG.error(e)
-                    return f'{e}'           
-            return response
+                LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
+                response = f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries'
+                self.programs[name]['p'] = None
+                self.programs[name]['pid'] = None
+                self.programs[name]['state'] = STOPPED
+                self.programs[name]['start_ts'] = None
+                break
+        if work_dir is not None:
+            try:
+                LOG.debug(f'cd to cwd {cwd}')
+                os.chdir(cwd)
+            except IOError as e:
+                LOG.error(e)
+                return f'{e}'
+        if isinstance(log_stdout, io.IOBase):
+            log_stdout.close()
+        if isinstance(log_stderr, io.IOBase):
+            log_stderr.close()         
+        return response
 
     def stop_programs(self, command):
         response = ''
@@ -272,23 +276,27 @@ class Taskmasterd:
         return response
 
     def stop(self, name):
-        if self.programs[name]['p'] is not None:
+        p = self.programs[name]['p']
+        if p is not None:
             kill_signal = self.programs[name]['stop_signal']
             kill_timeout = self.programs[name]['kill_timeout']
 
             LOG.info(f'Stopping process {self.programs[name]["pid"]}')
-            self.programs[name]['p'].send_signal(kill_signal)
+            # p.stdout.close()
+            # p.stderr.close()
+            p.send_signal(kill_signal)
             try:
-                self.programs[name]['p'].wait(timeout=kill_timeout)
+                p.wait(timeout=kill_timeout)
                 LOG.info(f'stopped pid {self.programs[name]["pid"]} successfully')
                 response = f'stopped {name} successfully|'
+                self.programs[name]['state'] = STOPPED
             except TimeoutExpired:
-                self.programs[name]['p'].kill()
+                p.kill()
                 LOG.warn(f'Killed pid {self.programs[name]["pid"]} after timeout ({kill_timeout} seconds)')
                 response = f'Killed {name} after timeout ({kill_timeout} seconds)|'
+                self.programs[name]['state'] = KILLED
             finally:
                 self.programs[name]['p'] = None
-                self.programs[name]['state'] = STOPPED
                 self.programs[name]['start_ts'] = None
                 self.programs[name]['pid'] = None
         else:
@@ -305,7 +313,7 @@ class Taskmasterd:
         for name in command:
             self.stop(name)
             response += self.start(name)
-            response = response.replace('started', 'restarted')
+        response = response.replace('started', 'restarted')
         return response
 
     def get_status(self):
@@ -397,6 +405,13 @@ class Taskmasterd:
         else:
             return f'No {fd} logfile specified for {name}: output is directed to /dev/null'
 
+    def check_if_running(self, name):
+        if 'p' in self.programs[name]:
+            if self.programs[name]['p'] is not None:
+                if self.programs[name]['p'].poll() is None:
+                    return True
+        return False
+
     def daemonize(self):
         """
         This function daemonizes the program like Supervisor
@@ -461,7 +476,7 @@ def main():
     except ConfigError as e:
         sys.exit(f'ConfigError: {e}')
     d = Taskmasterd(config.conf)
-    print('Server started')
+    print('Server starting...')
     if not args.nodaemon:
         d.daemonize()
     d.run()
