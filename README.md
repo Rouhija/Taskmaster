@@ -50,16 +50,16 @@ server:
 ### Commands
 | CMD | ACTION |
 |---------|---------|
-| help | Display help |
-| status | Display processes |
-| start *name/all* | Start program |
-| stop *name/all* | Stop program |
-| restart *name/all* | Restart program |
-| tail *name stdout/stderr* | Read last 10 entries from program logs |
-| reread | Reread configuration file |
-| update | Apply configuration file changes |
-| shutdown | Terminate taskmasterd |
-| quit/exit | Exit |
+| **help** | Display help |
+| **status** | Display processes |
+| **start** *name/all* | Start program |
+| **stop** *name/all* | Stop program |
+| **restart** *name/all* | Restart program |
+| **tail** *name stdout/stderr* | Read last 10 entries from program logs |
+| **reread** | Reread configuration file |
+| **update** | Apply configuration file changes |
+| **shutdown** | Terminate taskmasterd |
+| **quit**/**exit** | Exit |
 
 ### Dependencies
 - PyYAML==5.1

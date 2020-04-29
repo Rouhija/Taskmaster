@@ -39,11 +39,10 @@ class Editor:
             elif key in self.fmap:
                 stdin = self.fmap[key](self, stdin, key)
             else:
+                stdin = self.insert(stdin, self.x_pos, key.decode())
                 self.x_pos += 1
-                stdin += key.decode()
             self.clear()
             print(stdin, end="", flush=True)
-            # print(f'  x: {self.x_pos}  in_len: {len(stdin) - self.correction} input: {stdin}', end="", flush=True)
         self.x_pos = 0
         self.correction = 0
         self.hist.add(stdin)
@@ -120,6 +119,13 @@ class Editor:
     @staticmethod
     def erase(str, n):
         return str[:n] + str[n + 1:]
+
+    @staticmethod
+    def insert(s, n, c):
+        try:
+            return s[:n] + c + s[n:]
+        except:
+            return s + c
 
     fmap = {
         b'\x1b[A': arrow_up,
