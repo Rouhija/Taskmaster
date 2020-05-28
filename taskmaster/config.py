@@ -34,7 +34,6 @@ class ConfigError(Error):
     def __init__(self, message):
         self.message = message
 
-
 class Config(object):
 
     """

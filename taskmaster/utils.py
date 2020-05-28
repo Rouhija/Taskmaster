@@ -1,3 +1,4 @@
+import argparse
 import pkg_resources
 
 VERSION = pkg_resources.require("taskmaster")[0].version
@@ -67,3 +68,16 @@ def parse(command: str):
         return command.strip().lower()
     except:
         return None
+
+
+def arg_parserctl():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--debug", help="log to console", action="store_true")
+    return parser.parse_args()
+
+
+def arg_parserd():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file")
+    parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
+    return parser.parse_args()

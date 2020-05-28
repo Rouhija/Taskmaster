@@ -19,6 +19,7 @@ import logging
 import argparse
 from copy import deepcopy
 from os.path import dirname, realpath
+from taskmaster.utils import arg_parserd
 from time import gmtime, strftime, time, sleep
 from taskmaster.config import Config, ConfigError
 from subprocess import PIPE, Popen, TimeoutExpired
@@ -463,7 +464,7 @@ class Taskmasterd:
 def logger_options(nodaemon):
     if nodaemon:
         logging.basicConfig(
-            level=logging.INFO,
+            level=logging.DEBUG,
             format='%(levelname)s:%(asctime)s ⁠— %(message)s',
             datefmt='%d/%m/%Y %H:%M:%S'
         )
@@ -478,15 +479,8 @@ def logger_options(nodaemon):
     return
 
 
-def arg_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file")
-    parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
-    return parser.parse_args()
-
-
 def main():
-    args = arg_parser()
+    args = arg_parserd()
     logger_options(args.nodaemon)
     try:
         config = Config(args.configuration)

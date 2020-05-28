@@ -16,6 +16,7 @@ dist = setup(
     author_email="rouhesami@gmail.com",
 	packages=find_packages(),
     test_suite="taskmaster.tests",
+    install_requires=['PyYAML'],
     entry_points={
         'console_scripts': [
 			'taskmasterd = taskmaster.taskmasterd:main',

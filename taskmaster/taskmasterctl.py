@@ -11,12 +11,11 @@ import sys
 import socket
 import signal
 import logging
-import argparse
 from subprocess import Popen, PIPE
 from taskmaster.editor import Editor
 from taskmaster.config import Config
 from os.path import dirname, realpath
-from taskmaster.utils import parse, syntax
+from taskmaster.utils import parse, syntax, arg_parserctl
 
 LOG = logging.getLogger(__name__)
 
@@ -52,9 +51,9 @@ class Console:
         self.set_signals()
         e = Editor()
         while 1:
-            command = e.read_in()
+            command = e.user_input()
             command = parse(command)
-            if command == None or command == 'quit' or command == 'exit':
+            if command is None or command == 'quit' or command == 'exit':
                 break
             elif command == '':
                 pass
@@ -112,7 +111,7 @@ class Console:
             LOG.debug('closing socket')
             self.sock.close()
         finally:
-            sys.exit()
+            sys.exit('')
 
 
 def logger_options(debug: int):
@@ -132,15 +131,9 @@ def logger_options(debug: int):
         )
 
 
-def arg_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--debug", help="log to console", action="store_true")
-    return parser.parse_args()
-
-
 def main():
     print(SNEK)
-    args = arg_parser()
+    args = arg_parserctl()
     logger_options(args.debug)
     conf = Config(ctl=True)
     c = Console(conf.port)
