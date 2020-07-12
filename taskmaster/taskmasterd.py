@@ -48,7 +48,7 @@ class Taskmasterd:
         self.connection = None
         self.buf = 1028
         self.conn_timeout = 3 # prefer shorter timeouts
-        self.data_timeout = 10 # set to high, 30 etc.
+        self.data_timeout = 3 # set to high, 30 etc.
 
     def listen_signals(self):
         signal.signal(signal.SIGINT, self.signal_handler)
