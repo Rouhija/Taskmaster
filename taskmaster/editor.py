@@ -21,7 +21,7 @@ class Editor:
         try:
             stdin = input(self.prompt)
             return stdin
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             return None
 
 

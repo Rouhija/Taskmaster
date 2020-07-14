@@ -1,5 +1,7 @@
+import logging
 import argparse
 import pkg_resources
+from os.path import dirname, realpath
 
 VERSION = pkg_resources.require("taskmaster")[0].version
 
@@ -81,3 +83,21 @@ def arg_parserd():
     parser.add_argument("-c", "--configuration", help="The path to a taskmasterd configuration file")
     parser.add_argument("-n", "--nodaemon", help="Run taskmasterd in the foreground", action="store_true")
     return parser.parse_args()
+
+
+def loggerd_options(nodaemon):
+    if nodaemon:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )
+    else:
+        work_dir = dirname(realpath(__file__))
+        logging.basicConfig(
+            filename=f'{work_dir}/resources/logs/taskmasterd.log',
+            level=logging.INFO,
+            format='%(levelname)s:%(asctime)s ⁠— %(message)s',
+            datefmt='%d/%m/%Y %H:%M:%S'
+        )
+    return

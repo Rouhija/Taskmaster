@@ -5,7 +5,7 @@ UNIX job control program, much like [Supervisor](http://supervisord.org/). Consi
 ```sh
 virtualenv venv -p python3 && source venv/bin/activate
 pip install -r requirements.txt
-python3 setup.py develop
+python setup.py develop
 ```
 
 ### Usage
