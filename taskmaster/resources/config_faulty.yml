@@ -1,0 +1,32 @@
+programs:
+    script:
+        command: ['./script.sh']
+        autostart: true
+        autorestart: 'unexpected'
+        stdout_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/scriptout.log'
+        instances: 2
+        stop_signal: 15
+        kill_timeout: '2'
+        restarts: 9
+        expected_exit: [0, -15]
+        startup_wait: 0
+        environment: ['var:value', 'var2:val']
+        dir: '/home/snake/Taskmaster/taskmaster/resources'
+        umask: 0o22
+    scriptshort:
+        command: ['./scriptshort.sh']
+        autostart: true
+        autorestart: 'sometimes'
+        stderr_logfile: '/dev/null'
+        stdout_logfile: '/dev/null'
+        dir: '/home/snake/Taskmaster/taskmaster/resources'
+    short_echo:
+        command: ['./echo.sh']
+        autostart: true
+        autorestart: 'unexpected'
+        expected_exit: [0]
+        stderr_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/echo_out.log'
+        stdout_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/echo_err.log'
+        dir: '/home/snake/Taskmaster/taskmaster/resources'
+server:
+    port: 9999

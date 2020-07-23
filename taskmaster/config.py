@@ -59,8 +59,9 @@ class Config(object):
         search = ['config.yml', 'config.yaml', 'configuration.yml', 'taskmaster/resources/config.yml']
         parent_dir = dirname(dirname(realpath(__file__)))
         for s in search:
+            path = os.path.join(parent_dir, s)
             try:
-                with open(f'{parent_dir}/{s}', 'r') as cfg_stream: 
+                with open(path, 'r') as cfg_stream: 
                     self.conf = yaml.load(cfg_stream, Loader=yaml.BaseLoader)
                     return
             except:

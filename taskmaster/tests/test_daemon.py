@@ -4,7 +4,7 @@ import signal
 import logging
 import unittest
 from time import sleep
-from subprocess import Popen
+from subprocess import Popen, PIPE
 from taskmaster.config import Config
 from os.path import dirname, realpath
 from taskmaster.taskmasterd import Taskmasterd
@@ -41,6 +41,23 @@ class DaemonTests(unittest.TestCase):
                 else:
                     flag = False
         return flag
+
+    def pipe_to_controller(self, command: list):
+        cmd_list = ["/bin/echo"] + command
+        p_command = Popen(cmd_list, stdout=PIPE)
+        p_controller = Popen(['taskmasterctl'], stdin=p_command.stdout, stdout=PIPE, stderr=PIPE)
+        p_command.stdout.close()
+        p_command.wait()
+        stdout, stderr = p_controller.communicate()
+        p_controller.wait()
+        return stdout, stderr
+
+    def start_daemon(self, options=None):
+        if options is not None:
+            command = ['taskmasterd'] + options
+        else:
+            command = ['taskmasterd']
+        return Popen(command)
 
     def test_00(self):
         expected = 4
@@ -115,6 +132,14 @@ class DaemonTests(unittest.TestCase):
         response = self.d.action('status')
         result = self.prog_status(response, 'all', 'RUNNING')
         self.assertEqual(expected, result)
+
+    # def test_10_config(self):
+    #     daemon = self.start_daemon()
+    #     out, err = self.pipe_to_controller(['status'])
+    #     print(out)
+    #     print(err)
+    #     self.pipe_to_controller(['shutdown'])
+
 
 
 if __name__ == "__main__":
