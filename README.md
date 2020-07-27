@@ -63,3 +63,7 @@ server:
 
 ### Dependencies
 - PyYAML==5.1
+
+### to-do
+- fix umask
+- attach process to console

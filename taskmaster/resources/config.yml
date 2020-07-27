@@ -7,9 +7,9 @@ programs:
         instances: 2
         stop_signal: 15
         kill_timeout: 5
-        restarts: 9
+        restarts: 3
         expected_exit: [0, -15]
-        startup_wait: 0
+        startup_wait: 2
         environment: ['var:value', 'var2:val']
         dir: '/home/snake/Taskmaster/taskmaster/resources'
         umask: 0o22
@@ -28,5 +28,22 @@ programs:
         stderr_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/echo_out.log'
         stdout_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/echo_err.log'
         dir: '/home/snake/Taskmaster/taskmaster/resources'
+    script_error:
+        command: ['./script_error.sh']
+        autostart: true
+        autorestart: 'unexpected'
+        expected_exit: [0, 1]
+        stderr_logfile: '/dev/null'
+        stdout_logfile: '/dev/null'
+        dir: '/home/snake/Taskmaster/taskmaster/resources'
+    script_umask:
+        command: ['./script_umask.sh']
+        autostart: true
+        autorestart: 'never'
+        expected_exit: [0, 1]
+        stderr_logfile: '/dev/null'
+        stdout_logfile: '/dev/null'
+        dir: '/home/snake/Taskmaster/taskmaster/resources'
+        umask: 777
 server:
     port: 9999

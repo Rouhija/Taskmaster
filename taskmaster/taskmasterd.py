@@ -51,6 +51,7 @@ class Taskmasterd:
         self.data_timeout = 3 # set to high, 30 etc.
 
     def listen_signals(self):
+        signal.signal(signal.SIGHUP, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGQUIT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
@@ -58,6 +59,10 @@ class Taskmasterd:
     def signal_handler(self, signum, frame):
         if signum == signal.SIGINT or signum == signal.SIGQUIT or signum == signal.SIGTERM:
             self.cleanup()
+        elif signum == signal.SIGHUP:
+            response = self.action('reread')
+            if response is not None:
+                self.action('update')
 
     def cleanup(self):
         try:
@@ -166,7 +171,11 @@ class Taskmasterd:
                         self.programs[k]['pid'] = None
                         LOG.info(f'{k} exited with {exit_code}')
                         if autorestart == 'always' or (autorestart == 'unexpected' and exit_code not in self.programs[k]['expected_exit']):
-                            self.restart_programs([k])
+                            if self.programs[k]['restarts'] > 0:
+                                self.programs[k]['restarts'] -= 1
+                                self.restart_programs([k])
+                            else:
+                                LOG.warn(f'restarting {k} was unsuccessful (exit code {exit_code})')
         except Exception as e:
             LOG.error(f'manager: {e}')
         finally:
@@ -212,6 +221,7 @@ class Taskmasterd:
         startup_wait = self.programs[name]['startup_wait']
         log_stdout = self.programs[name]['stdout_logfile']
         log_stderr = self.programs[name]['stderr_logfile']
+        expected_exits = self.programs[name]['expected_exit']
 
         if isinstance(log_stdout, str):
             log_stdout = open(log_stdout, 'w+')
@@ -225,7 +235,7 @@ class Taskmasterd:
             except IOError as e:
                 LOG.error(e)
                 return f"Can't use working dir {dir} for {name}"
-        os.umask(self.programs[name]['umask'])
+        # os.umask(self.programs[name]['umask'])
         while 1:
             p = Popen(
                 self.programs[name]['command'],
@@ -234,7 +244,8 @@ class Taskmasterd:
                 env=self.programs[name]['environment']
             )
             sleep(startup_wait)
-            if p.poll() is None:
+            poll = p.poll()
+            if poll is None:
                 self.programs[name]['p'] = p
                 self.programs[name]['state'] = RUNNING
                 self.programs[name]['start_ts'] = time()
@@ -242,8 +253,8 @@ class Taskmasterd:
                 LOG.info(f'{name} started successfully with pid {p.pid}')
                 response = f'{name} started successfully|'
                 break
-            elif restarts:
-                sleep(0.1)
+            elif restarts and poll not in expected_exits:
+                sleep(0.3)
                 restarts -= 1
             else:
                 LOG.warn(f'starting {name} was unsuccessful after {self.programs[name]["restarts"]} retries')
