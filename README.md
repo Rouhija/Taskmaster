@@ -56,14 +56,12 @@ server:
 | **stop** *name/all* | Stop program |
 | **restart** *name/all* | Restart program |
 | **tail** *name stdout/stderr* | Read last 10 entries from program logs |
+| **attach** *name stdout/stderr* | Attach fd of a program to console |
 | **reread** | Reread configuration file |
 | **update** | Apply configuration file changes |
+| **reload** | run reread + update |
 | **shutdown** | Terminate taskmasterd |
 | **quit**/**exit** | Exit |
 
 ### Dependencies
 - PyYAML==5.1
-
-### to-do
-- fix umask
-- attach process to console

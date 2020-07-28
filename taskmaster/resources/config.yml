@@ -4,7 +4,7 @@ programs:
         autostart: true
         autorestart: 'unexpected'
         stdout_logfile: '/home/snake/Taskmaster/taskmaster/resources/logs/scriptout.log'
-        instances: 1
+        instances: 3
         stop_signal: 15
         kill_timeout: 5
         restarts: 3
