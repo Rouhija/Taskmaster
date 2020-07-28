@@ -9,7 +9,6 @@ Options:
 
 import sys
 import socket
-import signal
 import logging
 from subprocess import Popen, PIPE
 from taskmaster.editor import Editor
@@ -37,36 +36,27 @@ class Console:
         self.buf = 8192
 
 
-    def set_signals(self):
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
-
-
-    def signal_handler(self, signum, frame):
-        if signum == signal.SIGINT or signum == signal.SIGTERM:
-            self.cleanup()
-
-
     def run_forever(self):
-        self.set_signals()
         e = Editor()
-        while 1:
-            command = e.user_input()
-            command = parse(command)
-            if command is None or command == 'quit' or command == 'exit':
-                break
-            elif command == '':
-                pass
-            elif syntax(command) == True:
-                response = self.send_to_daemon(command)
-                if response is None:
-                    print(f'No response. Make sure taskmasterd is running.')
-                    LOG.warn(f'No response from {self.server_address}')
-                elif 'attach' in command and response is not None:
-                    self.attach(response)
-                else:
-                    self.echo_resp(response)
-        self.cleanup()
+        try:
+            while 1:
+                command = e.user_input()
+                command = parse(command)
+                if command is None or command == 'quit' or command == 'exit':
+                    break
+                elif command == '':
+                    pass
+                elif syntax(command) == True:
+                    response = self.send_to_daemon(command)
+                    if response is None:
+                        print(f'No response. Make sure taskmasterd is running.')
+                        LOG.warn(f'No response from {self.server_address}')
+                    elif 'attach' in command and response is not None:
+                        self.attach(response)
+                    else:
+                        self.echo_resp(response)
+        finally:
+            self.cleanup()
 
 
     def echo_resp(self, response):
@@ -81,8 +71,21 @@ class Console:
             resp = response.split('|')
             pid = int(resp[0])
             fd = int(resp[1])
-        except:
-            print('error in attaching process to console')
+            p = Popen(['tail', '-f', f'/proc/{pid}/fd/{fd}'], stdout=PIPE, stderr=PIPE)
+            if fd == 1:
+                for line in iter(p.stdout.readline, b''):
+                    print(line, flush=True)
+            elif fd == 2:
+                for line in iter(p.stderr.readline, b''):
+                    print(line, flush=True)
+        except (KeyboardInterrupt, EOFError):
+            pass
+        except Exception as e:
+            print(f'error in attaching process to console: {e}')
+        finally:
+            p.stdout.close()
+            p.stderr.close()
+            p.wait()
 
 
     def send_to_daemon(self, command):
