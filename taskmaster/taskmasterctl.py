@@ -15,7 +15,7 @@ from subprocess import Popen, PIPE
 from taskmaster.editor import Editor
 from taskmaster.config import Config
 from os.path import dirname, realpath
-from taskmaster.utils import parse, syntax, arg_parserctl
+from taskmaster.utils import parse, syntax, arg_parserctl, clear_screen
 
 LOG = logging.getLogger(__name__)
 
@@ -62,6 +62,8 @@ class Console:
                 if response is None:
                     print(f'No response. Make sure taskmasterd is running.')
                     LOG.warn(f'No response from {self.server_address}')
+                elif 'attach' in command and response is not None:
+                    self.attach(response)
                 else:
                     self.echo_resp(response)
         self.cleanup()
@@ -72,6 +74,15 @@ class Console:
         for r in resp:
             if r:
                 print(r)
+
+
+    def attach(self, response):
+        try:
+            resp = response.split('|')
+            pid = int(resp[0])
+            fd = int(resp[1])
+        except:
+            print('error in attaching process to console')
 
 
     def send_to_daemon(self, command):

@@ -194,13 +194,25 @@ class Taskmasterd:
                 return self.restart_programs(command[1:])
             elif command[0] == 'tail':
                 return self.tail(command[1], command[2])
+            elif command[0] == 'attach':
+                return self.get_pid(command[1:])
             elif command[0] == 'reread':
                 return self.reread()
             elif command[0] == 'update':
                 return self.update()
+            elif command[0] == 'reload':
+                if self.reread() is not None:
+                    return self.update()
+                else:
+                    return 'could not reread configuration'
         except Exception as e:
             LOG.error(f'action: {e}')
             return f'{e} not found'
+
+    def get_pid(self, command):
+        pid = self.programs[command[0]]['pid']
+        fd = 1 if command[1] == 'stdout' else 2
+        return f'{pid}|{fd}'
 
     def start_programs(self, command):
         response = ''

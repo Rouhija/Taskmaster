@@ -60,7 +60,7 @@ class DaemonTests(unittest.TestCase):
         return Popen(command)
 
     def test_00(self):
-        expected = 4
+        expected = 6
         response = self.d.action('status')
         result = self.parse_response(response)
         self.assertEqual(expected, len(result))

@@ -1,3 +1,4 @@
+import os
 import argparse
 import pkg_resources
 
@@ -15,25 +16,25 @@ COMMANDS = [
     'stop',
     'tail',
     'update',
-    'version'
+    'version',
+    'attach'
 ]
 
 NEEDS_ARG = [
-    'exit',
-    'reload',
     'restart',
     'start',
-    'stop',
-    'tail'
+    'stop'
 ]
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def print_help(command):
-    if command == 'start' or command == 'stop':
-        print(f'usage: {command} <name> | all')
+    print(f'usage: {command} <name> | all')
 
 
-def syntax_tail(command):
+def syntax_tail_attach(command):
     try:
         streams = ['stdout', 'stderr']
         if len(command) != 3:
@@ -56,9 +57,9 @@ def syntax(s):
     elif len(split) == 1 and split[0] in NEEDS_ARG:
         print_help(split[0])
         return False
-    elif split[0] == 'tail':
-        if not syntax_tail(split):
-            print(f'usage: tail <name> <stdout/stderr>')
+    elif split[0] == 'tail' or split[0] == 'attach':
+        if not syntax_tail_attach(split):
+            print(f'usage: {split[0]} <name> <stdout/stderr>')
             return False
     return True
 

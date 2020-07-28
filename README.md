@@ -22,7 +22,7 @@ taskmasterctl
 
 Run tests
 ```sh
-python3 setup.py test
+python setup.py test
 ```
 
 ### Configuration
